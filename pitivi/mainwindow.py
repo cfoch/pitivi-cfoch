@@ -397,6 +397,8 @@ class PitiviMainWindow(Gtk.Window, Loggable):
 
         self.vpaned.pack2(self.timeline_ui, resize=True, shrink=False)
 
+        self.timeline_ui.timeline.selection.connect("selection-changed", self.title_editor.selectionChangedCb)
+
         # Identify widgets for AT-SPI, making our test suite easier to develop
         # These will show up in sniff, accerciser, etc.
         self.get_accessible().set_name("main window")

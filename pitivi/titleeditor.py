@@ -581,7 +581,6 @@ class TitleEditor(Loggable):
         self.bt = {}
         self.settings = {}
         self.clip = None
-        self.created = False
         self.seeker = Seeker()
 
         #Drag attributes
@@ -765,33 +764,29 @@ class TitleEditor(Loggable):
                 self.seeker.flush()
                 return
 
-    def _reset(self):
-        #TODO: reset not only text
+    def set_clip(self, clip):
+        """
+        Set the clip to be edited with this editor.
+
+        @type clip: L{GES.TitleClip}
+        """
+        self.debug("Clip set to %s", clip)
+        self._deactivate()
+        assert isinstance(clip, GES.TextOverlay) or \
+            isinstance(clip, GES.TitleClip)
+        self.clip = clip
+        self._updateFromClip()
+        self._activate()
+
+    def unset_clip(self):
+        self.clip = None
+        self._deactivate()
+        # TODO: reset not only text
         self.markup_button.set_active(False)
         self.pangobuffer.set_text("")
         self.textbuffer.set_text("")
-        #Set right buffer
+        # Set the right buffer
         self._markupToggleCb(self.markup_button)
-
-    def set_clip(self, clip, created=False):  # FIXME: this "created" boolean param is a hack
-        """
-        Set the GESTitleClip to be used with the title editor.
-        This can be called either from the title editor in _createCb, or by
-        track.py to set the clip to None.
-        """
-        self.debug("Clip set to %s", clip)
-        self.clip = clip
-        self._reset()
-        self.created = created
-        # We can't just assert clip is not None... because track.py may ask us
-        # to reset the clip to None
-        if clip is None:
-            self._deactivate()
-        else:
-            assert isinstance(clip, GES.TextOverlay) or \
-                isinstance(clip, GES.TitleClip)
-            self._updateFromClip()
-            self._activate()
 
     def _createCb(self, unused_button):
         """
@@ -800,13 +795,10 @@ class TitleEditor(Loggable):
         clip = GES.TitleClip()
         clip.set_text("")
         clip.set_duration(long(Gst.SECOND * 5))
-        self.set_clip(clip, True)
         # TODO: insert on the current layer at the playhead position.
         # If no space is available, create a new layer to insert to on top.
-        self.app.gui.timeline_ui.insertEnd([self.clip])
-        self.app.gui.timeline_ui.timeline.selection.setToObj(self.clip, SELECT)
-        #After insertion consider as not created
-        self.created = False
+        self.app.gui.timeline_ui.insertEnd([clip])
+        self.app.gui.timeline_ui.timeline.selection.setToObj(clip, SELECT)
 
     def _connect_signals(self):
         if not self._signals_connected:
@@ -876,3 +868,10 @@ class TitleEditor(Loggable):
             self._connect_signals()
         else:
             self._disconnect_signals()
+
+    def selectionChangedCb(self, selection):
+        selected_clip = selection.getSingleClip(GES.TitleClip)
+        if selected_clip:
+            self.set_clip(selected_clip)
+        else:
+            self.unset_clip()
