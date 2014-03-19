@@ -289,7 +289,7 @@
                             <property name="can_focus">False</property>
                             <property name="entry_text_column">0</property>
                             <property name="id_column">1</property>
-                            <signal name="changed" handler="_updateSource" swapped="no"/>
+                            <signal name="changed" handler="_updateClip" swapped="no"/>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -305,7 +305,7 @@
                             <property name="active">1</property>
                             <property name="entry_text_column">0</property>
                             <property name="id_column">1</property>
-                            <signal name="changed" handler="_updateSource" swapped="no"/>
+                            <signal name="changed" handler="_updateClip" swapped="no"/>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -323,7 +323,7 @@
                             <property name="adjustment">position_x_adj</property>
                             <property name="digits">2</property>
                             <property name="numeric">True</property>
-                            <signal name="value-changed" handler="_updateSource" swapped="no"/>
+                            <signal name="value-changed" handler="_updateClip" swapped="no"/>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>
@@ -341,7 +341,7 @@
                             <property name="adjustment">position_y_adj</property>
                             <property name="digits">2</property>
                             <property name="numeric">True</property>
-                            <signal name="value-changed" handler="_updateSource" swapped="no"/>
+                            <signal name="value-changed" handler="_updateClip" swapped="no"/>
                           </object>
                           <packing>
                             <property name="left_attach">2</property>

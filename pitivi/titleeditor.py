@@ -580,7 +580,7 @@ class TitleEditor(Loggable):
         self.app = instance
         self.bt = {}
         self.settings = {}
-        self.source = None
+        self.clip = None
         self.created = False
         self.seeker = Seeker()
 
@@ -593,8 +593,8 @@ class TitleEditor(Loggable):
         self.pangobuffer = InteractivePangoBuffer()
         self.textarea.set_buffer(self.pangobuffer)
 
-        self.textbuffer.connect("changed", self._updateSourceText)
-        self.pangobuffer.connect("changed", self._updateSourceText)
+        self.textbuffer.connect("changed", self._updateClipText)
+        self.pangobuffer.connect("changed", self._updateClipText)
 
         #Connect buttons
         self.pangobuffer.setup_widget_from_pango(self.bt["bold"], "<b>bold</b>")
@@ -643,7 +643,7 @@ class TitleEditor(Loggable):
         color_int += int(color.blue * 255) * 256 ** 0
         color_int += int(color.alpha * 255) * 256 ** 3
         self.debug("Setting title background color to %s", hex(color_int))
-        self.source.set_background(color_int)
+        self.clip.set_background(color_int)
 
     def _frontTextColorButtonCb(self, widget):
         suc, a, t, s = Pango.parse_markup("<span color='" + widget.get_color().to_string() + "'>color</span>", -1, u'\x00')
@@ -668,8 +668,8 @@ class TitleEditor(Loggable):
         # FIXME: either make this feature rock-solid or replace it by a
         # Clear markup" button. Currently it is possible for the user to create
         # invalid markup (causing errors) or to get our textbuffer confused
-        self.textbuffer.disconnect_by_func(self._updateSourceText)
-        self.pangobuffer.disconnect_by_func(self._updateSourceText)
+        self.textbuffer.disconnect_by_func(self._updateClipText)
+        self.pangobuffer.disconnect_by_func(self._updateClipText)
         if markup_button.get_active():
             self.textbuffer.set_text(self.pangobuffer.get_text())
             self.textarea.set_buffer(self.textbuffer)
@@ -683,8 +683,8 @@ class TitleEditor(Loggable):
             for name in self.bt:
                 self.bt[name].set_sensitive(True)
 
-        self.textbuffer.connect("changed", self._updateSourceText)
-        self.pangobuffer.connect("changed", self._updateSourceText)
+        self.textbuffer.connect("changed", self._updateClipText)
+        self.pangobuffer.connect("changed", self._updateClipText)
 
     def _activate(self):
         """
@@ -704,24 +704,24 @@ class TitleEditor(Loggable):
         self.editing_box.hide()
         self._disconnect_signals()
 
-    def _updateFromSource(self):
-        if self.source is not None:
-            source_text = self.source.get_text()
-            self.log("Title text set to %s", source_text)
-            if source_text is None:
-                # FIXME: sometimes we get a TextOverlay/TitleSource
+    def _updateFromClip(self):
+        if self.clip is not None:
+            text = self.clip.get_text()
+            self.log("Title text set to %s", text)
+            if text is None:
+                # FIXME: sometimes we get a TextOverlay
                 # without a valid text property. This should not happen.
-                source_text = ""
-                self.warning('Source did not have a text property, setting it to "" to avoid pango choking up on None')
-            self.pangobuffer.set_text(source_text)
-            self.textbuffer.set_text(source_text)
-            self.settings['xpos'].set_value(self.source.get_xpos())
-            self.settings['ypos'].set_value(self.source.get_ypos())
-            self.settings['valignment'].set_active_id(self.source.get_valignment().value_name)
-            self.settings['halignment'].set_active_id(self.source.get_halignment().value_name)
-            if hasattr(self.source, "get_background"):
+                text = ""
+                self.warning('Clip did not have a text property, setting it to "" to avoid pango choking up on None')
+            self.pangobuffer.set_text(text)
+            self.textbuffer.set_text(text)
+            self.settings['xpos'].set_value(self.clip.get_xpos())
+            self.settings['ypos'].set_value(self.clip.get_ypos())
+            self.settings['valignment'].set_active_id(self.clip.get_valignment().value_name)
+            self.settings['halignment'].set_active_id(self.clip.get_halignment().value_name)
+            if hasattr(self.clip, "get_background"):
                 self.bt["back_color"].set_visible(True)
-                color = self.source.get_background()
+                color = self.clip.get_background()
                 color = Gdk.RGBA(color / 256 ** 2 % 256 / 255.,
                                  color / 256 ** 1 % 256 / 255.,
                                  color / 256 ** 0 % 256 / 255.,
@@ -730,38 +730,38 @@ class TitleEditor(Loggable):
             else:
                 self.bt["back_color"].set_visible(False)
 
-    def _updateSourceText(self, unused_updated_obj):
-        if self.source is not None:
+    def _updateClipText(self, unused_updated_obj):
+        if self.clip is not None:
             if self.markup_button.get_active():
                 text = self.textbuffer.get_text(self.textbuffer.get_start_iter(),
                                                 self.textbuffer.get_end_iter(),
                                                 True)
             else:
                 text = self.pangobuffer.get_text()
-            self.log("Source text updated to %s", text)
-            self.source.set_text(text)
+            self.log("Clip text updated to %s", text)
+            self.clip.set_text(text)
             self.seeker.flush()
 
-    def _updateSource(self, updated_obj):
+    def _updateClip(self, updated_obj):
         """
         Handle changes in one of the advanced property widgets at the bottom
         """
-        if self.source is None:
+        if self.clip is None:
             return
         for name, obj in self.settings.items():
             if obj == updated_obj:
                 if name == "valignment":
-                    self.source.set_valignment(getattr(GES.TextVAlign, obj.get_active_id().upper()))
+                    self.clip.set_valignment(getattr(GES.TextVAlign, obj.get_active_id().upper()))
                     self.settings["ypos"].set_visible(obj.get_active_id() == "position")
                 elif name == "halignment":
-                    self.source.set_halignment(getattr(GES.TextHAlign, obj.get_active_id().upper()))
+                    self.clip.set_halignment(getattr(GES.TextHAlign, obj.get_active_id().upper()))
                     self.settings["xpos"].set_visible(obj.get_active_id() == "position")
                 elif name == "xpos":
                     self.settings["halignment"].set_active_id("position")
-                    self.source.set_xpos(obj.get_value())
+                    self.clip.set_xpos(obj.get_value())
                 elif name == "ypos":
                     self.settings["valignment"].set_active_id("position")
-                    self.source.set_ypos(obj.get_value())
+                    self.clip.set_ypos(obj.get_value())
                 self.seeker.flush()
                 return
 
@@ -773,39 +773,38 @@ class TitleEditor(Loggable):
         #Set right buffer
         self._markupToggleCb(self.markup_button)
 
-    def set_source(self, source, created=False):  # FIXME: this "created" boolean param is a hack
+    def set_clip(self, clip, created=False):  # FIXME: this "created" boolean param is a hack
         """
         Set the GESTitleClip to be used with the title editor.
         This can be called either from the title editor in _createCb, or by
-        track.py to set the source to None.
+        track.py to set the clip to None.
         """
-        self.debug("Source set to %s", source)
-        self.source = source
+        self.debug("Clip set to %s", clip)
+        self.clip = clip
         self._reset()
         self.created = created
-        # We can't just assert source is not None... because track.py may ask us
-        # to reset the source to None
-        if source is None:
+        # We can't just assert clip is not None... because track.py may ask us
+        # to reset the clip to None
+        if clip is None:
             self._deactivate()
         else:
-            assert isinstance(source, GES.TextOverlay) or \
-                isinstance(source, GES.TitleSource) or \
-                isinstance(source, GES.TitleClip)
-            self._updateFromSource()
+            assert isinstance(clip, GES.TextOverlay) or \
+                isinstance(clip, GES.TitleClip)
+            self._updateFromClip()
             self._activate()
 
     def _createCb(self, unused_button):
         """
         The user clicked the "Create and insert" button, initialize the UI
         """
-        source = GES.TitleClip()
-        source.set_text("")
-        source.set_duration(long(Gst.SECOND * 5))
-        self.set_source(source, True)
+        clip = GES.TitleClip()
+        clip.set_text("")
+        clip.set_duration(long(Gst.SECOND * 5))
+        self.set_clip(clip, True)
         # TODO: insert on the current layer at the playhead position.
         # If no space is available, create a new layer to insert to on top.
-        self.app.gui.timeline_ui.insertEnd([self.source])
-        self.app.gui.timeline_ui.timeline.selection.setToObj(self.source, SELECT)
+        self.app.gui.timeline_ui.insertEnd([self.clip])
+        self.app.gui.timeline_ui.timeline.selection.setToObj(self.clip, SELECT)
         #After insertion consider as not created
         self.created = False
 
