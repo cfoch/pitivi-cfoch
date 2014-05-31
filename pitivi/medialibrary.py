@@ -48,12 +48,14 @@ from pitivi.settings import GlobalSettings
 from pitivi.mediafilespreviewer import PreviewWidget
 from pitivi.dialogs.filelisterrordialog import FileListErrorDialog
 from pitivi.dialogs.clipmediaprops import ClipMediaPropsDialog
+from pitivi.dialogs.imagesequences import ImageSequenceDialog
 from pitivi.utils.ui import beautify_length
-from pitivi.utils.misc import PathWalker, quote_uri, path_from_uri
+from pitivi.utils.misc import PathWalker, quote_uri, path_from_uri, generate_image_sequence_filenames
 from pitivi.utils.signal import SignalGroup
 from pitivi.utils.loggable import Loggable
 import pitivi.utils.ui as dnd
 from pitivi.utils.ui import beautify_info, info_name, SPACING
+from pitivi.utils.imagesequences import ImageSequencePlaylist, IMAGE_SEQUENCE_PROTOCOL
 
 from pitivi.utils.ui import TYPE_PITIVI_FILESOURCE
 
@@ -469,10 +471,13 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
         self._importDialog.set_current_folder(self.app.settings.lastImportFolder)
         self._importDialog.connect('response', self._dialogBoxResponseCb)
         self._importDialog.connect('close', self._dialogBoxCloseCb)
-        previewer = PreviewWidget(self.app.settings)
-        self._importDialog.set_preview_widget(previewer)
+        self._importDialog.connect('selection-changed', self._dialogBoxSelectionChangedCb)
+        self._previewer = PreviewWidget(self.app.settings)
+        self._importDialog.set_preview_widget(self._previewer)
         self._importDialog.set_use_preview_label(False)
-        self._importDialog.connect('update-preview', previewer.add_preview_request)
+        self._importDialog.connect('update-preview', self._previewer.add_preview_request)
+        self._previewer.w_sequence_mode.connect('toggled', self._previewer._sequence_mode_toggled_cb, self._importDialog)
+        self._previewer.w_sequence_framerate.connect('value-changed', self._previewer._sequence_framerate_changed_cb, self._importDialog)
         # Filter for the "known good" formats by default
         filt_supported = Gtk.FileFilter()
         filt_known = Gtk.FileFilter()
@@ -543,6 +548,12 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
                 return None, None
 
     def _generateThumbnails(self, uri):
+        if urlparse(uri)[0] == IMAGE_SEQUENCE_PROTOCOL:
+            playlist = ImageSequencePlaylist(uri)
+            playlist.parse()
+            # Get the first image of the sequence to set it as the thumbnail
+            middle = len(playlist.filenames) // 2
+            uri = quote_uri(playlist.filenames[middle])
         if not self.thumbnailer:
             # TODO: Use thumbnails generated with GStreamer.
             return None
@@ -711,7 +722,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
                 # Can happen if the user removed the asset in the meanwhile.
                 self.log("%s needed a thumbnail, but vanished from storemodel", uri)
 
-    ## Error Dialog Box callbacks
+    # # Error Dialog Box callbacks
 
     def _errorDialogBoxCloseCb(self, dialog):
         dialog.destroy()
@@ -719,19 +730,28 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
     def _errorDialogBoxResponseCb(self, dialog, unused_response):
         dialog.destroy()
 
-    ## Import Sources Dialog Box callbacks
+    # # Import Sources Dialog Box callbacks
 
     def _dialogBoxResponseCb(self, dialogbox, response):
         self.debug("response: %r", response)
+        previewer = dialogbox.get_preview_widget()
         if response == Gtk.ResponseType.OK:
             lastfolder = dialogbox.get_current_folder()
             self.app.settings.lastImportFolder = lastfolder
             self.app.settings.closeImportDialog = \
                 dialogbox.props.extra_widget.get_active()
-            filenames = dialogbox.get_uris()
-            self.app.project_manager.current_project.addUris(filenames)
+            if urlparse(previewer.current_selected_uri)[0] != IMAGE_SEQUENCE_PROTOCOL:
+                filenames = dialogbox.get_uris()
+                self.app.project_manager.current_project.addUris(filenames)
             if self.app.settings.closeImportDialog:
                 dialogbox.destroy()
+                if urlparse(previewer.current_selected_uri)[0] == IMAGE_SEQUENCE_PROTOCOL:
+                    playlist_filename = urlparse(previewer.current_selected_uri)[2]
+                    playlist = ImageSequencePlaylist(playlist_filename)
+                    if playlist.parse():
+                        dialog = ImageSequenceDialog(self.app, playlist)
+                        dialog.run()
+                    # else: HandleError
                 self._importDialog = None
         else:
             dialogbox.destroy()
@@ -740,6 +760,16 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
     def _dialogBoxCloseCb(self, unused_dialogbox):
         self.debug("closing")
         self._importDialog = None
+
+    def _dialogBoxSelectionChangedCb(self, unused_dialogbox):
+        filenames = unused_dialogbox.get_filenames()
+        filtered_filenames = generate_image_sequence_filenames(filenames)
+        self._previewer.w_sequence_mode.set_active(False)
+        self._previewer.w_sequence.hide()
+        if filtered_filenames:
+            self.log("Selected files match an image sequence")
+            self._previewer.w_sequence_mode.show()
+            self._previewer.w_sequence.show()
 
     def _removeSources(self):
         """
@@ -798,7 +828,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
                 else:
                     self.iconview.unselect_path(row.path)
 
-    ## UI callbacks
+    # # UI callbacks
 
     def _removeClickedCb(self, unused_widget=None):
         """ Called when a user clicks on the remove button """
@@ -993,7 +1023,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
                     iconview.select_path(current_cursor_pos)
 
     def _newProjectCreatedCb(self, unused_app, project):
-        if not self._project is project:
+        if self._project is not project:
             self._project = project
             self._resetErrorList()
             self.storemodel.clear()
@@ -1001,7 +1031,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
             self._connectToProject(project)
 
     def _newProjectLoadedCb(self, unused_app, project, unused_fully_ready):
-        if not self._project is project:
+        if self._project is not project:
             self._project = project
             self.storemodel.clear()
             self._connectToProject(project)
@@ -1021,7 +1051,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
             self.warning("Adding uris to project, but the project has changed in the meantime")
         return False
 
-    ## Drag and Drop
+    # # Drag and Drop
     def _dndDataReceivedCb(self, unused_widget, unused_context, unused_x,
                            unused_y, selection, targettype, unused_time):
         self.debug("targettype: %d, selection.data: %r", targettype, selection.get_data())
@@ -1053,7 +1083,7 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
         if filenames:
             self.app.project_manager.current_project.addUris(filenames)
 
-    #used with TreeView and IconView
+    # used with TreeView and IconView
     def _dndDragDataGetCb(self, unused_view, unused_context, data, unused_info, unused_timestamp):
         paths = self.getSelectedPaths()
         uris = [self.modelFilter[path][COL_URI] for path in paths]

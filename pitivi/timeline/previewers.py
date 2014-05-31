@@ -537,7 +537,7 @@ class Thumbnail(Clutter.Actor):
         self.props.content = image
         self.width = width
         self.height = height
-        #self.set_background_color(Clutter.Color.new(0, 100, 150, 100))
+        # self.set_background_color(Clutter.Color.new(0, 100, 150, 100))
         self.set_opacity(0)
         self.set_size(self.width, self.height)
         self.has_pixel_data = False
@@ -583,7 +583,7 @@ class ThumbnailCache(Loggable):
 
     def __init__(self, uri):
         Loggable.__init__(self)
-        self._filehash = hash_file(Gst.uri_get_location(uri))
+        self._filehash = hash_file(uri)
         self._filename = filename_from_uri(uri)
         thumbs_cache_dir = get_dir(os.path.join(xdg_cache_home(), "thumbs"))
         dbfile = os.path.join(thumbs_cache_dir, self._filehash)
@@ -619,7 +619,7 @@ class ThumbnailCache(Loggable):
             self.warning("JPEG compression failed")
             return
         blob = sqlite3.Binary(jpeg)
-        #Replace if the key already existed
+        # Replace if the key already existed
         self._cur.execute("DELETE FROM Thumbs WHERE  time=?", (key,))
         self._cur.execute("INSERT INTO Thumbs VALUES (?,?)", (key, blob,))
 
@@ -760,7 +760,7 @@ class AudioPreviewer(Clutter.Actor, PreviewGenerator, Zoomable, Loggable):
 
     def _startLevelsDiscovery(self):
         self.log('Preparing waveforms for "%s"' % filename_from_uri(self._uri))
-        filename = hash_file(Gst.uri_get_location(self._uri)) + ".wave"
+        filename = hash_file(self._uri) + ".wave"
         cache_dir = get_dir(os.path.join(xdg_cache_home(), "waves"))
         filename = cache_dir + "/" + filename
 

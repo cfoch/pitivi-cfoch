@@ -231,8 +231,11 @@ def beautify_info(info):
             continue
         if beautified_string:
             nice_streams_txts.append(beautified_string)
+    beautiful_uri = info.get_uri()
+    if beautiful_uri.startswith("file"):
+        beautiful_uri = path_from_uri(beautiful_uri)
 
-    return ("<b>" + path_from_uri(info.get_uri()) + "</b>\n" +
+    return ("<b>" + beautiful_uri + "</b>\n" +
         "\n".join(nice_streams_txts))
 
 
@@ -379,7 +382,7 @@ def beautify_ETA(length):
     return ", ".join(parts)
 
 
-#--------------------- Gtk widget helpers ------------------------------------#
+# --------------------- Gtk widget helpers ------------------------------------#
 def model(columns, data):
     ret = Gtk.ListStore(*columns)
     for datum in data:
@@ -423,7 +426,7 @@ def alter_style_class(style_class, target_widget, css_style):
     style_context.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
-#------------------------ encoding datas ----------------------------------------#
+# ------------------------ encoding datas ----------------------------------------#
 # FIXME This should into a special file
 frame_rates = model((str, object), (
     # Translators: fps is for frames per second

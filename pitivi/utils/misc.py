@@ -23,8 +23,12 @@
 import bisect
 import hashlib
 import os
+import re
+import glob
 import threading
 import time
+import tempfile
+import mimetypes
 from urllib.parse import urlparse, unquote, urlsplit
 
 from gi.repository import GLib
@@ -118,7 +122,7 @@ def path_from_uri(raw_uri):
     Return a path that can be used with Python's os.path.
     """
     uri = urlparse(raw_uri)
-    assert uri.scheme == "file"
+    # assert uri.scheme == "file"
     return unquote(uri.path)
 
 
@@ -134,7 +138,9 @@ def quote_uri(uri):
     """
     Encode a URI/path according to RFC 2396, without touching the file:/// part.
     """
-    # Split off the "file:///" part, if present.
+    protocol = urlparse(uri)[0]
+    if not (protocol == "file" or protocol == ""):
+        return uri
     parts = urlsplit(uri, allow_fragments=False)
     # Make absolutely sure the string is unquoted before quoting again!
     raw_path = unquote(parts.path)
@@ -177,6 +183,8 @@ class PathWalker(Thread):
 def hash_file(uri):
     """Hashes the first 256KB of the specified file"""
     sha256 = hashlib.sha256()
+    location = urlparse(uri)[2]
+    uri = Gst.uri_get_location(quote_uri(location))
     with open(uri, "rb") as file:
         for _ in range(1024):
             chunk = file.read(256)
@@ -234,3 +242,54 @@ def show_user_manual(page=None):
             continue
     log.warning("utils", "Failed loading URIs")
     # TODO: Show an error message to the user.
+
+
+def filename_of_type(filename, mimetype, compare_subtype=True):
+    """
+    Checks if filename is of type or type/subtype if compare_subtype.
+    """
+    btype = mimetypes.guess_type(filename)[0]
+    if compare_subtype:
+        ret = btype == mimetype
+    else:
+        ret = btype.split("/")[0] == mimetype.split("/")[0]
+    return ret
+
+
+def filenames_same_mimetype(filenames):
+    """
+    Checks if all the filenames have the same type.
+    """
+    mime_base = mimetypes.guess_type(filenames[0])[0]
+    for filename in filenames:
+        if not filename_of_type(filename, mime_base):
+            return False
+    return True
+
+
+def filter_filenames_by_mimetype(filenames, mimetype_base):
+    return [filename for filename in filenames
+            if mimetypes.guess_type(filename)[0] == mimetype_base]
+
+
+def generate_image_sequence_filenames(filenames):
+    """
+    Generate a list of filenames of images of the same type.
+    If the list contains only two image filenames, then it will return a list
+    with all the image filenames contained by the parent folder of the first
+    filename of the given list.
+    """
+    filtered_filenames = filenames
+    if len(filenames) < 2:
+        return
+    if (not filename_of_type(filenames[0], "image", False) or
+       not filenames_same_mimetype(filenames)):
+        return
+    if len(filenames) == 2:
+        parent_folder = os.path.dirname(filenames[0])
+        all_filenames = [os.path.join(parent_folder, filename)
+                        for filename in os.listdir(parent_folder)]
+        mimetype = mimetypes.guess_type(filenames[0])[0]
+        filtered_filenames = filter_filenames_by_mimetype(all_filenames, mimetype)
+        filtered_filenames.sort()
+    return filtered_filenames

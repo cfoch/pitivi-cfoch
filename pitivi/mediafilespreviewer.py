@@ -21,6 +21,8 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
+import os
+
 from gettext import gettext as _
 from gi.repository import GLib
 from gi.repository import GObject
@@ -33,10 +35,13 @@ from gi.repository import GstPbutils
 
 from pitivi.settings import GlobalSettings
 from pitivi.utils.loggable import Loggable
-from pitivi.utils.misc import uri_is_valid
+from pitivi.utils.misc import uri_is_valid, generate_image_sequence_filenames
+from pitivi.utils.widgets import FractionWidget
 from pitivi.utils.pipeline import AssetPipeline
 from pitivi.utils.ui import beautify_length, beautify_stream, SPACING
+from pitivi.utils.imagesequences import ImageSequencePlaylist
 from pitivi.viewer import ViewerWidget
+
 
 PREVIEW_WIDTH = 250
 PREVIEW_HEIGHT = 100
@@ -89,13 +94,13 @@ class PreviewWidget(Gtk.Grid, Loggable):
 
         self.discoverer = GstPbutils.Discoverer.new(Gst.SECOND)
 
-        #playbin for play pics
+        # Playbin for play pics
         self.player = AssetPipeline(clip=None, name="preview-player")
         self.player.connect('eos', self._pipelineEosCb)
         self.player.connect('error', self._pipelineErrorCb)
         self.player._bus.connect('message::tag', self._tag_found_cb)
 
-        #some global variables for preview handling
+        # Some global variables for preview handling
         self.is_playing = False
         self.original_dims = (PREVIEW_WIDTH, PREVIEW_HEIGHT)
         self.countinuous_seek = False
@@ -125,7 +130,7 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.play_button.connect("clicked", self._on_start_stop_clicked_cb)
         self.bbox.pack_start(self.play_button, False, False, 0)
 
-        #Scale for position handling
+        # Scale for position handling
         self.pos_adj = Gtk.Adjustment()
         self.seeker = Gtk.Scale.new(Gtk.Orientation.HORIZONTAL, self.pos_adj)
         self.seeker.connect('button-press-event', self._on_seeker_press_cb)
@@ -144,8 +149,17 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.b_zoom_out.connect("clicked", self._on_zoom_clicked_cb, -1)
         self.bbox.pack_start(self.b_zoom_in, False, True, 0)
         self.bbox.pack_start(self.b_zoom_out, False, True, 0)
-        self.bbox.show_all()
         self.attach(self.bbox, 0, 2, 1, 1)
+
+        # Image sequence widgets
+        self.w_sequence = Gtk.VBox()
+        self.w_sequence_framerate = FractionWidget()
+        self.w_sequence_framerate.setWidgetValue("1:1")
+        self.w_sequence_mode = Gtk.CheckButton("Import as an image-sequence clip")
+        self.w_sequence.add(self.w_sequence_framerate)
+        self.w_sequence.add(self.w_sequence_mode)
+        self.attach(self.w_sequence, 0, 3, 1, 1)
+        self.w_sequence.hide()
 
         # Label for metadata tags
         self.l_tags = Gtk.Label()
@@ -169,9 +183,12 @@ class PreviewWidget(Gtk.Grid, Loggable):
             self.remove(self.l_tags)
             self.bbox.remove(self.b_zoom_in)
             self.bbox.remove(self.b_zoom_out)
+            self.remove(self.w_sequence)
+            self.w_sequence.remove(self.w_sequence_framerate)
+            self.w_sequence.remove(self.w_sequence_mode)
 
     def add_preview_request(self, dialogbox):
-        """add a preview request """
+        """add a preview request"""
         uri = dialogbox.get_preview_uri()
         if uri is None or not uri_is_valid(uri):
             return
@@ -181,6 +198,7 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.log("Preview request for %s", uri)
         self.clear_preview()
         self.current_selected_uri = uri
+
         if uri in self.preview_cache:  # Already discovered
             self.log(uri + " already in cache")
             self.show_preview(uri, None)
@@ -319,6 +337,28 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.current_preview_type = ""
         self.preview_image.hide()
         self.preview_video.hide()
+
+    def _update_image_sequence_previewer(self, dialog):
+        filenames = dialog.get_filenames()
+        playlist = ImageSequencePlaylist()
+        playlist.filenames = generate_image_sequence_filenames(filenames)
+        playlist.framerate = self.w_sequence_framerate.getWidgetValue()
+        playlist.save()
+        if playlist.filename is None:
+            return
+        self.previewUri(playlist.get_uri())
+
+    def _sequence_framerate_changed_cb(self, widget, dialog):
+        self._update_image_sequence_previewer(dialog)
+
+    def _sequence_mode_toggled_cb(self, widget, dialog):
+        if self.w_sequence_mode.get_active():
+            self._update_image_sequence_previewer(dialog)
+            self.w_sequence_framerate.show()
+            self.w_sequence.show_all()
+        else:
+            self.w_sequence_framerate.hide()
+            self.add_preview_request(dialog)
 
     def _on_seeker_press_cb(self, widget, event):
         self.slider_being_used = True
