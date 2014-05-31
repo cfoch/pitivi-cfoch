@@ -234,3 +234,22 @@ def show_user_manual(page=None):
             continue
     log.warning("utils", "Failed loading URIs")
     # TODO: Show an error message to the user.
+
+
+def generate_location(filenames):
+    extensions = ('.jpg', '.png', '.jpeg', '.PNG', '.JPEG', '.JPG')
+    if len(filenames) == 1 and os.path.isdir(filenames[0]):
+        location = filenames[0] + "/"
+    elif len(filenames) == 2:
+        extension = os.path.splitext(filenames[0])[1]
+        extension2 = os.path.splitext(filenames[1])[1]
+        if (extension == extension2) and (extension in extensions):
+            dirname = os.path.dirname(filenames[0])
+            location = dirname + "/.*" + extension
+        else:
+            location = filenames[0]
+    elif len(filenames) > 2:
+        location = ','.join(filenames)
+    else:
+        location = filenames[0]
+    return location

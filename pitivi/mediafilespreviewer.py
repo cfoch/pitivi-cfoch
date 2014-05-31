@@ -33,10 +33,14 @@ from gi.repository import GstPbutils
 
 from pitivi.settings import GlobalSettings
 from pitivi.utils.loggable import Loggable
-from pitivi.utils.misc import uri_is_valid
+from pitivi.utils.misc import uri_is_valid, generate_location
 from pitivi.utils.pipeline import AssetPipeline
 from pitivi.utils.ui import beautify_length, beautify_stream, SPACING
 from pitivi.viewer import ViewerWidget
+
+import os
+import glob
+import re
 
 PREVIEW_WIDTH = 250
 PREVIEW_HEIGHT = 100
@@ -89,13 +93,13 @@ class PreviewWidget(Gtk.Grid, Loggable):
 
         self.discoverer = GstPbutils.Discoverer.new(Gst.SECOND)
 
-        #playbin for play pics
+        # Playbin for play pics
         self.player = AssetPipeline(clip=None, name="preview-player")
         self.player.connect('eos', self._pipelineEosCb)
         self.player.connect('error', self._pipelineErrorCb)
         self.player._bus.connect('message::tag', self._tag_found_cb)
 
-        #some global variables for preview handling
+        # Some global variables for preview handling
         self.is_playing = False
         self.original_dims = (PREVIEW_WIDTH, PREVIEW_HEIGHT)
         self.countinuous_seek = False
@@ -125,7 +129,7 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.play_button.connect("clicked", self._on_start_stop_clicked_cb)
         self.bbox.pack_start(self.play_button, False, False, 0)
 
-        #Scale for position handling
+        # Scale for position handling
         self.pos_adj = Gtk.Adjustment()
         self.seeker = Gtk.Scale.new(Gtk.Orientation.HORIZONTAL, self.pos_adj)
         self.seeker.connect('button-press-event', self._on_seeker_press_cb)
@@ -172,15 +176,25 @@ class PreviewWidget(Gtk.Grid, Loggable):
 
     def add_preview_request(self, dialogbox):
         """add a preview request """
-        uri = dialogbox.get_preview_uri()
-        if uri is None or not uri_is_valid(uri):
+        filenames = dialogbox.get_filenames()
+        if len(filenames) == 0:
             return
+        elif len(filenames) == 1 and os.path.isfile(filenames[0]):
+            uri = "file://" + filenames[0]
+            if not uri_is_valid(uri):
+                return
+        else:
+            framerate = "framerate1/1"
+            uri = "imagesequence://" + generate_location(filenames) + "?framerate=1/1"
+            if uri is None:
+                return
         self.previewUri(uri)
 
     def previewUri(self, uri):
         self.log("Preview request for %s", uri)
         self.clear_preview()
         self.current_selected_uri = uri
+
         if uri in self.preview_cache:  # Already discovered
             self.log(uri + " already in cache")
             self.show_preview(uri, None)
