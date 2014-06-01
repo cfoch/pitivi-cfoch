@@ -148,8 +148,17 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.b_zoom_out.connect("clicked", self._on_zoom_clicked_cb, -1)
         self.bbox.pack_start(self.b_zoom_in, False, True, 0)
         self.bbox.pack_start(self.b_zoom_out, False, True, 0)
-        self.bbox.show_all()
         self.attach(self.bbox, 0, 2, 1, 1)
+
+        # Image sequence widgets
+        self.w_sequence = Gtk.VBox()
+        self.w_sequence_framerate = Gtk.Entry()
+        self.w_sequence_framerate.set_text("framerate=1/1")
+        self.w_sequence_mode = Gtk.CheckButton("Import as an image-sequence clip")
+        self.w_sequence.add(self.w_sequence_framerate)
+        self.w_sequence.add(self.w_sequence_mode)
+        self.attach(self.w_sequence, 0, 3, 1, 1)
+        self.w_sequence.show_all()
 
         # Label for metadata tags
         self.l_tags = Gtk.Label()
@@ -180,14 +189,19 @@ class PreviewWidget(Gtk.Grid, Loggable):
         if len(filenames) == 0:
             return
         elif len(filenames) == 1 and os.path.isfile(filenames[0]):
-            uri = "file://" + filenames[0]
+            self.w_sequence.hide()
+            uri = "file://%s" % (filenames[0])
             if not uri_is_valid(uri):
                 return
         else:
-            framerate = "framerate1/1"
-            uri = "imagesequence://" + generate_location(filenames) + "?framerate=1/1"
-            if uri is None:
+            location = generate_location(filenames)
+            # loop = "0"
+            if location is None:
                 return
+            else:
+                self.w_sequence.show_all()
+                framerate = self._get_sequence_framerate()
+                uri = "imagesequence://%s?%s" % (location, framerate)
         self.previewUri(uri)
 
     def previewUri(self, uri):
@@ -333,6 +347,9 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.current_preview_type = ""
         self.preview_image.hide()
         self.preview_video.hide()
+
+    def _get_sequence_framerate(self):
+        return self.w_sequence_framerate.get_text()
 
     def _on_seeker_press_cb(self, widget, event):
         self.slider_being_used = True
