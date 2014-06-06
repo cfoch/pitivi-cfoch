@@ -21,6 +21,8 @@
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
 
+import os
+
 from gettext import gettext as _
 from gi.repository import GLib
 from gi.repository import GObject
@@ -38,9 +40,6 @@ from pitivi.utils.pipeline import AssetPipeline
 from pitivi.utils.ui import beautify_length, beautify_stream, SPACING
 from pitivi.viewer import ViewerWidget
 
-import os
-import glob
-import re
 
 PREVIEW_WIDTH = 250
 PREVIEW_HEIGHT = 100
@@ -90,6 +89,7 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.settings = settings
         self.preview_cache = {}
         self.preview_cache_errors = {}
+        self.uri = None
 
         self.discoverer = GstPbutils.Discoverer.new(Gst.SECOND)
 
@@ -182,6 +182,9 @@ class PreviewWidget(Gtk.Grid, Loggable):
             self.remove(self.l_tags)
             self.bbox.remove(self.b_zoom_in)
             self.bbox.remove(self.b_zoom_out)
+            self.remove(self.w_sequence)
+            self.w_sequence.remove(self.w_sequence_framerate)
+            self.w_sequence.remove(self.w_sequence_mode)
 
     def add_preview_request(self, dialogbox):
         """add a preview request """
@@ -190,19 +193,18 @@ class PreviewWidget(Gtk.Grid, Loggable):
             return
         elif len(filenames) == 1 and os.path.isfile(filenames[0]):
             self.w_sequence.hide()
-            uri = "file://%s" % (filenames[0])
-            if not uri_is_valid(uri):
+            self.uri = "file://%s" % (filenames[0])
+            if not uri_is_valid(self.uri):
                 return
         else:
             location = generate_location(filenames)
-            # loop = "0"
             if location is None:
                 return
             else:
                 self.w_sequence.show_all()
                 framerate = self._get_sequence_framerate()
-                uri = "imagesequence://%s?%s" % (location, framerate)
-        self.previewUri(uri)
+                self.uri = "imagesequence://%s?%s" % (location, framerate)
+        self.previewUri(self.uri)
 
     def previewUri(self, uri):
         self.log("Preview request for %s", uri)
@@ -350,6 +352,14 @@ class PreviewWidget(Gtk.Grid, Loggable):
 
     def _get_sequence_framerate(self):
         return self.w_sequence_framerate.get_text()
+
+    def _sequence_mode_toggled_cb(self, tooglebutton, dialog):
+        if self.w_sequence_mode.get_active():
+            # TODO: complete
+            pass
+        else:
+            # TODO: complete
+            pass
 
     def _on_seeker_press_cb(self, widget, event):
         self.slider_being_used = True

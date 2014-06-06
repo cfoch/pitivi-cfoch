@@ -23,6 +23,8 @@
 import bisect
 import hashlib
 import os
+import re
+import glob
 import threading
 import time
 from urllib.parse import urlparse, unquote, urlsplit
@@ -118,7 +120,7 @@ def path_from_uri(raw_uri):
     Return a path that can be used with Python's os.path.
     """
     uri = urlparse(raw_uri)
-    assert uri.scheme == "file"
+    # assert uri.scheme == "file"
     return unquote(uri.path)
 
 
@@ -134,7 +136,9 @@ def quote_uri(uri):
     """
     Encode a URI/path according to RFC 2396, without touching the file:/// part.
     """
-    # Split off the "file:///" part, if present.
+    if is_image_sequence_uri(uri):
+        return uri
+    # Split off the protocol "file:///" or "imagesequence:///" part, if present.
     parts = urlsplit(uri, allow_fragments=False)
     # Make absolutely sure the string is unquoted before quoting again!
     raw_path = unquote(parts.path)
@@ -177,6 +181,11 @@ class PathWalker(Thread):
 def hash_file(uri):
     """Hashes the first 256KB of the specified file"""
     sha256 = hashlib.sha256()
+    if is_image_sequence_uri(uri):
+        # TODO: Make me more beatiful
+        info = image_sequence_get_info(uri)
+        uri = quote_uri(info["filenames"][0])
+    uri = Gst.uri_get_location(uri)
     with open(uri, "rb") as file:
         for _ in range(1024):
             chunk = file.read(256)
@@ -236,20 +245,48 @@ def show_user_manual(page=None):
     # TODO: Show an error message to the user.
 
 
+def image_sequence_get_info(uri):
+    info = {}
+    aux = re.split("imagesequence:\/\/|,|\?", uri)
+    props_aux = re.split("=|&", aux[-1])
+
+    info["filenames"] = aux[1:-1]
+    for i in range(len(props_aux)):
+        if i % 2 == 0:
+            info[props_aux[i]] = props_aux[i + 1]
+    return info
+
+
+def is_image_sequence_uri(uri):
+    # TODO: validate more things
+    return uri.startswith("imagesequence")
+
+
 def generate_location(filenames):
     extensions = ('.jpg', '.png', '.jpeg', '.PNG', '.JPEG', '.JPG')
+    images = None
     if len(filenames) == 1 and os.path.isdir(filenames[0]):
-        location = filenames[0] + "/"
+        dirname = filenames[0]
+        content = os.listdir(dirname)
+        if len(content) > 0:
+            extension = os.path.splitext(content[0])[1]
+            if extension in extensions:
+                images = glob.glob(os.path.join(dirname, ".*" + extension))
+                images.sort()
     elif len(filenames) == 2:
         extension = os.path.splitext(filenames[0])[1]
         extension2 = os.path.splitext(filenames[1])[1]
         if (extension == extension2) and (extension in extensions):
             dirname = os.path.dirname(filenames[0])
-            location = dirname + "/.*" + extension
-        else:
-            location = filenames[0]
+            images = glob.glob(os.path.join(dirname, "*" + extension))
+            images.sort()
     elif len(filenames) > 2:
-        location = ','.join(filenames)
-    else:
-        location = filenames[0]
-    return location
+        extension = os.path.splitext(filenames[0])[1]
+        if extension in extensions:
+            are_images = all(
+                [extension == os.path.splitext(filename)[1] for filename in filenames])
+            if are_images:
+                images = filenames
+    if images is None:
+        return
+    return ','.join(images)
