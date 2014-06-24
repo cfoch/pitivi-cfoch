@@ -271,7 +271,7 @@ def generate_location(filenames):
         if len(content) > 0:
             extension = os.path.splitext(content[0])[1]
             if extension in extensions:
-                images = glob.glob(os.path.join(dirname, ".*" + extension))
+                images = glob.glob(os.path.join(dirname, "*" + extension))
                 images.sort()
     elif len(filenames) == 2:
         extension = os.path.splitext(filenames[0])[1]
