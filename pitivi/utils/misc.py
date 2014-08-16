@@ -27,6 +27,8 @@ import re
 import glob
 import threading
 import time
+import tempfile
+import mimetypes
 from urllib.parse import urlparse, unquote, urlsplit
 
 from gi.repository import GLib
@@ -182,9 +184,8 @@ def hash_file(uri):
     """Hashes the first 256KB of the specified file"""
     sha256 = hashlib.sha256()
     if is_image_sequence_uri(uri):
-        # TODO: Make me more beatiful
-        info = image_sequence_get_info(uri)
-        uri = quote_uri(info["filenames"][0])
+        path = urlparse(uri)[2]
+        uri = quote_uri(uri)
     uri = Gst.uri_get_location(uri)
     with open(uri, "rb") as file:
         for _ in range(1024):
@@ -245,48 +246,79 @@ def show_user_manual(page=None):
     # TODO: Show an error message to the user.
 
 
+def image_sequence_uri_get_filenames(uri):
+    location = urlparse(uri)[2]
+    keyfile = GLib.KeyFile()
+    keyfile.load_from_file(location, 0)
+    filenames = keyfile.get_string_list("imagesequence", "filenames-list")
+    if not filenames:
+        return
+    return filenames
+
+
 def image_sequence_get_info(uri):
     info = {}
-    aux = re.split("imagesequence:\/\/|,|\?", uri)
-    props_aux = re.split("=|&", aux[-1])
-
-    info["filenames"] = aux[1:-1]
-    for i in range(len(props_aux)):
-        if i % 2 == 0:
-            info[props_aux[i]] = props_aux[i + 1]
+    info["filenames"] = image_sequence_uri_get_filenames(uri)
     return info
 
 
 def is_image_sequence_uri(uri):
-    # TODO: validate more things
-    return uri.startswith("imagesequence")
+    return urlparse(uri)[0]
+
+
+def create_imagesequence_file(filenames_list, framerate=None, loop=None):
+    tmp = tempfile.NamedTemporaryFile(mode="wt", prefix='pitivi_', delete=False)
+    tmp.write("metadata, framerate=%s\n" % framerate)
+    for filename in filenames_list:
+        tmp.write("image, location=\"%s\"\n" % filename)
+    path = tmp.name
+    tmp.close()
+    return path
+
+
+def filename_of_type(filename, mimetype, compare_subtype=True):
+    """
+    Checks if filename is of type or type/subtype if compare_subtype.
+    """
+    btype = mimetypes.guess_type(filename)[0]
+    if compare_subtype:
+        ret = btype == mimetype
+    else:
+        ret = btype.split("/")[0] == mimetype.split("/")[0]
+    return ret
+
+
+def filenames_same_mimetype(filenames):
+    """
+    Checks if all the filenames have the same type.
+    """
+    mime_base = mimetypes.guess_type(filenames[0])[0]
+    for filename in filenames:
+        if not filename_of_type(filename, mime_base):
+            return False
+    return True
+
+
+def filter_filenames_by_mimetype(filenames, mimetype_base):
+    return [filename for filename in filenames
+            if mimetypes.guess_type(filename)[0] == mimetype_base]
 
 
 def generate_location(filenames):
-    extensions = ('.jpg', '.png', '.jpeg', '.PNG', '.JPEG', '.JPG')
-    images = None
-    if len(filenames) == 1 and os.path.isdir(filenames[0]):
-        dirname = filenames[0]
-        content = os.listdir(dirname)
-        if len(content) > 0:
-            extension = os.path.splitext(content[0])[1]
-            if extension in extensions:
-                images = glob.glob(os.path.join(dirname, "*" + extension))
-                images.sort()
-    elif len(filenames) == 2:
-        extension = os.path.splitext(filenames[0])[1]
-        extension2 = os.path.splitext(filenames[1])[1]
-        if (extension == extension2) and (extension in extensions):
-            dirname = os.path.dirname(filenames[0])
-            images = glob.glob(os.path.join(dirname, "*" + extension))
-            images.sort()
-    elif len(filenames) > 2:
-        extension = os.path.splitext(filenames[0])[1]
-        if extension in extensions:
-            are_images = all(
-                [extension == os.path.splitext(filename)[1] for filename in filenames])
-            if are_images:
-                images = filenames
-    if images is None:
+    """
+    TODO: write doc
+    """
+    filtered_filenames = filenames
+    if len(filenames) < 2:
         return
-    return ','.join(images)
+    if (not filename_of_type(filenames[0], "image", False) or
+       not filenames_same_mimetype(filenames)):
+        return
+    if len(filenames) == 2:
+        parent_folder = os.path.dirname(filenames[0])
+        all_filenames = [os.path.join(parent_folder, filename)
+                        for filename in os.listdir(parent_folder)]
+        mimetype = mimetypes.guess_type(filenames[0])[0]
+        filtered_filenames = filter_filenames_by_mimetype(all_filenames, mimetype)
+        filtered_filenames.sort()
+    return filtered_filenames

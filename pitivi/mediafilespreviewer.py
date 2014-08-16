@@ -35,7 +35,8 @@ from gi.repository import GstPbutils
 
 from pitivi.settings import GlobalSettings
 from pitivi.utils.loggable import Loggable
-from pitivi.utils.misc import uri_is_valid, generate_location
+from pitivi.utils.misc import uri_is_valid, generate_location, create_imagesequence_file
+from pitivi.utils.widgets import FractionWidget
 from pitivi.utils.pipeline import AssetPipeline
 from pitivi.utils.ui import beautify_length, beautify_stream, SPACING
 from pitivi.viewer import ViewerWidget
@@ -152,13 +153,13 @@ class PreviewWidget(Gtk.Grid, Loggable):
 
         # Image sequence widgets
         self.w_sequence = Gtk.VBox()
-        self.w_sequence_framerate = Gtk.Entry()
-        self.w_sequence_framerate.set_text("framerate=1/1")
+        self.w_sequence_framerate = FractionWidget()
+        self.w_sequence_framerate.setWidgetValue("1:1")
         self.w_sequence_mode = Gtk.CheckButton("Import as an image-sequence clip")
         self.w_sequence.add(self.w_sequence_framerate)
         self.w_sequence.add(self.w_sequence_mode)
         self.attach(self.w_sequence, 0, 3, 1, 1)
-        self.w_sequence.show_all()
+        self.w_sequence.hide()
 
         # Label for metadata tags
         self.l_tags = Gtk.Label()
@@ -187,24 +188,11 @@ class PreviewWidget(Gtk.Grid, Loggable):
             self.w_sequence.remove(self.w_sequence_mode)
 
     def add_preview_request(self, dialogbox):
-        """add a preview request """
-        filenames = dialogbox.get_filenames()
-        if len(filenames) == 0:
+        """add a preview request"""
+        uri = dialogbox.get_preview_uri()
+        if uri is None or not uri_is_valid(uri):
             return
-        elif len(filenames) == 1 and os.path.isfile(filenames[0]):
-            self.w_sequence.hide()
-            self.uri = "file://%s" % (filenames[0])
-            if not uri_is_valid(self.uri):
-                return
-        else:
-            location = generate_location(filenames)
-            if location is None:
-                return
-            else:
-                self.w_sequence.show_all()
-                framerate = self._get_sequence_framerate()
-                self.uri = "imagesequence://%s?%s" % (location, framerate)
-        self.previewUri(self.uri)
+        self.previewUri(uri)
 
     def previewUri(self, uri):
         self.log("Preview request for %s", uri)
@@ -351,15 +339,21 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.preview_video.hide()
 
     def _get_sequence_framerate(self):
-        return self.w_sequence_framerate.get_text()
+        return self.w_sequence_framerate.getWidgetValue()
 
     def _sequence_mode_toggled_cb(self, tooglebutton, dialog):
         if self.w_sequence_mode.get_active():
-            # TODO: complete
-            pass
+            self.w_sequence_framerate.show()
+            filenames = dialog.get_filenames()
+            filtered_filenames = generate_location(filenames)
+            filename = create_imagesequence_file(filtered_filenames, framerate="(fraction)24/1")
+            self.uri = "imagesequence://" + filename
+            self.w_sequence.show_all()
+            framerate = self._get_sequence_framerate()
+            self.previewUri(self.uri)
         else:
-            # TODO: complete
-            pass
+            self.w_sequence_framerate.hide()
+            self.add_preview_request(dialog)
 
     def _on_seeker_press_cb(self, widget, event):
         self.slider_being_used = True

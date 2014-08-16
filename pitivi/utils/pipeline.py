@@ -276,7 +276,7 @@ class SimplePipeline(Signallable, Loggable):
         else:
             self.play()
 
-    #{ Position and Seeking methods
+    # { Position and Seeking methods
 
     def getPosition(self, format=Gst.Format.TIME):
         """
@@ -420,8 +420,8 @@ class SimplePipeline(Signallable, Loggable):
         seekvalue = max(0, min(self.getPosition() + time, self.getDuration()))
         self.simple_seek(seekvalue)
 
-    #}
-    ## Private methods
+    # }
+    # # Private methods
 
     def _busMessageCb(self, unused_bus, message):
         if message.type == Gst.MessageType.EOS:
@@ -514,6 +514,7 @@ class AssetPipeline(SimplePipeline):
 
     def __init__(self, clip=None, name=None):
         bPipeline = Gst.ElementFactory.make("playbin", name)
+        bPipeline.connect("source-setup", self.sourceSetupCb)
         SimplePipeline.__init__(self, bPipeline)
 
         self.clip = clip
@@ -522,6 +523,9 @@ class AssetPipeline(SimplePipeline):
 
     def setClipUri(self, uri):
         self._pipeline.set_property("uri", uri)
+
+    def sourceSetupCb(self, playbin, source):
+        self.source = source
 
 
 class Pipeline(GES.Pipeline, SimplePipeline):
