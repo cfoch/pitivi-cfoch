@@ -35,7 +35,7 @@ from gi.repository import GstPbutils
 
 from pitivi.settings import GlobalSettings
 from pitivi.utils.loggable import Loggable
-from pitivi.utils.misc import uri_is_valid, generate_location, create_imagesequence_file
+from pitivi.utils.misc import uri_is_valid, generate_image_sequence_filenames, create_imagesequence_playlist_file
 from pitivi.utils.widgets import FractionWidget
 from pitivi.utils.pipeline import AssetPipeline
 from pitivi.utils.ui import beautify_length, beautify_stream, SPACING
@@ -90,7 +90,6 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.settings = settings
         self.preview_cache = {}
         self.preview_cache_errors = {}
-        self.uri = None
 
         self.discoverer = GstPbutils.Discoverer.new(Gst.SECOND)
 
@@ -338,19 +337,22 @@ class PreviewWidget(Gtk.Grid, Loggable):
         self.preview_image.hide()
         self.preview_video.hide()
 
-    def _get_sequence_framerate(self):
-        return self.w_sequence_framerate.getWidgetValue()
+    def _update_image_sequence_previewer(self, dialog):
+        filenames = dialog.get_filenames()
+        filtered_filenames = generate_image_sequence_filenames(filenames)
+        framerate = self.w_sequence_framerate.getWidgetValue()
+        filename = create_imagesequence_playlist_file(filtered_filenames, framerate)
+        uri = "imagesequence://" + filename
+        self.previewUri(uri)
 
-    def _sequence_mode_toggled_cb(self, tooglebutton, dialog):
+    def _sequence_framerate_changed_cb(self, widget, dialog):
+        self._update_image_sequence_previewer(dialog)
+
+    def _sequence_mode_toggled_cb(self, widget, dialog):
         if self.w_sequence_mode.get_active():
+            self._update_image_sequence_previewer(dialog)
             self.w_sequence_framerate.show()
-            filenames = dialog.get_filenames()
-            filtered_filenames = generate_location(filenames)
-            filename = create_imagesequence_file(filtered_filenames, framerate="(fraction)24/1")
-            self.uri = "imagesequence://" + filename
             self.w_sequence.show_all()
-            framerate = self._get_sequence_framerate()
-            self.previewUri(self.uri)
         else:
             self.w_sequence_framerate.hide()
             self.add_preview_request(dialog)

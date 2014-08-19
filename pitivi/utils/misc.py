@@ -263,16 +263,24 @@ def image_sequence_get_info(uri):
 
 
 def is_image_sequence_uri(uri):
-    return urlparse(uri)[0]
+    """
+    Checks if the given uri has the imagesequence:// protocol.
+    """
+    return urlparse(uri)[0] == "imagesequence"
 
 
-def create_imagesequence_file(filenames_list, framerate=None, loop=None):
-    tmp = tempfile.NamedTemporaryFile(mode="wt", prefix='pitivi_', delete=False)
-    tmp.write("metadata, framerate=%s\n" % framerate)
+def create_imagesequence_playlist_file(filenames_list, framerate=None, tmp=True):
+    """
+    Creates an imagesequencesrc playlist.
+    """
+    if tmp:
+        playlist = tempfile.NamedTemporaryFile(mode="wt", prefix='pitivi_', delete=False)
+        playlist.write("metadata, framerate=(fraction)%d/%d\n" %
+            (framerate.num, framerate.denom))
     for filename in filenames_list:
-        tmp.write("image, location=\"%s\"\n" % filename)
-    path = tmp.name
-    tmp.close()
+        playlist.write("image, location=\"%s\"\n" % filename)
+    path = playlist.name
+    playlist.close()
     return path
 
 
@@ -304,9 +312,12 @@ def filter_filenames_by_mimetype(filenames, mimetype_base):
             if mimetypes.guess_type(filename)[0] == mimetype_base]
 
 
-def generate_location(filenames):
+def generate_image_sequence_filenames(filenames):
     """
-    TODO: write doc
+    Generate a list of filenames of images of the same type.
+    If the list contains only two image filenames, then it will return a list
+    with all the image filenames contained by the parent folder of the first
+    filename of the given list.
     """
     filtered_filenames = filenames
     if len(filenames) < 2:

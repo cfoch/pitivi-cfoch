@@ -48,8 +48,9 @@ from pitivi.settings import GlobalSettings
 from pitivi.mediafilespreviewer import PreviewWidget
 from pitivi.dialogs.filelisterrordialog import FileListErrorDialog
 from pitivi.dialogs.clipmediaprops import ClipMediaPropsDialog
+from pitivi.dialogs.playlistdialog import CreatePlaylistDialog
 from pitivi.utils.ui import beautify_length
-from pitivi.utils.misc import PathWalker, quote_uri, path_from_uri, image_sequence_uri_get_filenames, is_image_sequence_uri, generate_location
+from pitivi.utils.misc import PathWalker, quote_uri, path_from_uri, image_sequence_uri_get_filenames, is_image_sequence_uri, generate_image_sequence_filenames
 from pitivi.utils.signal import SignalGroup
 from pitivi.utils.loggable import Loggable
 import pitivi.utils.ui as dnd
@@ -470,11 +471,12 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
         self._importDialog.connect('response', self._dialogBoxResponseCb)
         self._importDialog.connect('close', self._dialogBoxCloseCb)
         self._importDialog.connect('selection-changed', self._dialogBoxSelectionChangedCb)
-        self.previewer = PreviewWidget(self.app.settings)
-        self._importDialog.set_preview_widget(self.previewer)
+        self._previewer = PreviewWidget(self.app.settings)
+        self._importDialog.set_preview_widget(self._previewer)
         self._importDialog.set_use_preview_label(False)
-        self._importDialog.connect('update-preview', self.previewer.add_preview_request)
-        self.previewer.w_sequence_mode.connect('toggled', self.previewer._sequence_mode_toggled_cb, self._importDialog)
+        self._importDialog.connect('update-preview', self._previewer.add_preview_request)
+        self._previewer.w_sequence_mode.connect('toggled', self._previewer._sequence_mode_toggled_cb, self._importDialog)
+        self._previewer.w_sequence_framerate.connect('value-changed', self._previewer._sequence_framerate_changed_cb, self._importDialog)
         # Filter for the "known good" formats by default
         filt_supported = Gtk.FileFilter()
         filt_known = Gtk.FileFilter()
@@ -546,15 +548,10 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
 
     def _generateThumbnails(self, uri):
         if is_image_sequence_uri(uri):
-            print("HOLA")
-            filenames = self.previewer.player.source.get_property("filenames-list")
-            print(filenames)
-            print("B2")
+            filenames = self._previewer.player.source.get_property("filenames-list")
             # Get the first image of the sequence to set it as the thumbnail
             middle = len(filenames) // 2
             uri = quote_uri(filenames[middle])
-            print(uri)
-            print(":)")
         if not self.thumbnailer:
             # TODO: Use thumbnails generated with GStreamer.
             return None
@@ -741,13 +738,16 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
             self.app.settings.lastImportFolder = lastfolder
             self.app.settings.closeImportDialog = \
                 dialogbox.props.extra_widget.get_active()
-            if is_image_sequence_uri(previewer.uri):
-                filenames = [previewer.uri]
-            else:
+            if not is_image_sequence_uri(previewer.current_selected_uri):
                 filenames = dialogbox.get_uris()
-            self.app.project_manager.current_project.addUris(filenames)
+                self.app.project_manager.current_project.addUris(filenames)
             if self.app.settings.closeImportDialog:
                 dialogbox.destroy()
+                if is_image_sequence_uri(previewer.current_selected_uri):
+                    playlist_filename = urlparse(previewer.current_selected_uri)[2]
+                    dialog = CreatePlaylistDialog(self.app.project_manager.current_project,
+                        playlist_filename)
+                    dialog.run()
                 self._importDialog = None
         else:
             dialogbox.destroy()
@@ -759,13 +759,13 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
 
     def _dialogBoxSelectionChangedCb(self, unused_dialogbox):
         filenames = unused_dialogbox.get_filenames()
-        filtered_filenames = generate_location(filenames)
-        self.previewer.w_sequence_mode.set_active(False)
-        self.previewer.w_sequence.hide()
+        filtered_filenames = generate_image_sequence_filenames(filenames)
+        self._previewer.w_sequence_mode.set_active(False)
+        self._previewer.w_sequence.hide()
         if filtered_filenames:
-            print("Matches a imagesequencesrc")
-            self.previewer.w_sequence_mode.show()
-            self.previewer.w_sequence.show()
+            self.log("Selected files match an image sequence")
+            self._previewer.w_sequence_mode.show()
+            self._previewer.w_sequence.show()
 
     def _removeSources(self):
         """
