@@ -55,6 +55,7 @@ from pitivi.utils.signal import SignalGroup
 from pitivi.utils.loggable import Loggable
 import pitivi.utils.ui as dnd
 from pitivi.utils.ui import beautify_info, info_name, SPACING
+from pitivi.imagesequenceeditor import ImageSequenceEditor, ImageSequencePlaylist
 
 from pitivi.utils.ui import TYPE_PITIVI_FILESOURCE
 
@@ -745,9 +746,11 @@ class MediaLibraryWidget(Gtk.VBox, Loggable):
                 dialogbox.destroy()
                 if is_image_sequence_uri(previewer.current_selected_uri):
                     playlist_filename = urlparse(previewer.current_selected_uri)[2]
-                    dialog = CreatePlaylistDialog(self.app.project_manager.current_project,
-                        playlist_filename)
-                    dialog.run()
+                    playlist = ImageSequencePlaylist(playlist_filename)
+                    if playlist.parse():
+                        dialog = ImageSequenceEditor(self.app, playlist_filename)
+                        dialog.run()
+                    # else: HandleError
                 self._importDialog = None
         else:
             dialogbox.destroy()

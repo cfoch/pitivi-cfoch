@@ -40,6 +40,7 @@ from pitivi.utils.widgets import FractionWidget
 from pitivi.utils.pipeline import AssetPipeline
 from pitivi.utils.ui import beautify_length, beautify_stream, SPACING
 from pitivi.viewer import ViewerWidget
+from pitivi.imagesequenceeditor import ImageSequencePlaylist
 
 
 PREVIEW_WIDTH = 250
@@ -339,11 +340,13 @@ class PreviewWidget(Gtk.Grid, Loggable):
 
     def _update_image_sequence_previewer(self, dialog):
         filenames = dialog.get_filenames()
-        filtered_filenames = generate_image_sequence_filenames(filenames)
-        framerate = self.w_sequence_framerate.getWidgetValue()
-        filename = create_imagesequence_playlist_file(filtered_filenames, framerate)
-        uri = "imagesequence://" + filename
-        self.previewUri(uri)
+        playlist = ImageSequencePlaylist()
+        playlist.filenames = generate_image_sequence_filenames(filenames)
+        playlist.framerate = self.w_sequence_framerate.getWidgetValue()
+        playlist.save()
+        if playlist.filename is None:
+            return
+        self.previewUri("imagesequence://%s" % playlist.filename)
 
     def _sequence_framerate_changed_cb(self, widget, dialog):
         self._update_image_sequence_previewer(dialog)
