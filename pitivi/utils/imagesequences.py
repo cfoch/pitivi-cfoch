@@ -22,7 +22,7 @@
 
 import os
 import tempfile
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 from gi.repository import Gst
 
@@ -76,7 +76,8 @@ class ImageSequencePlaylist:
     def _set_filename(self, path_or_uri):
         if path_or_uri is None:
             return
-        return urlparse(path_or_uri)[2]
+        filename = urlparse(path_or_uri)[2]
+        return unquote(filename)
 
     def _is_valid(self):
         # TODO: Validate each filename exists

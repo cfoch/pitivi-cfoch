@@ -138,15 +138,17 @@ def quote_uri(uri):
     """
     Encode a URI/path according to RFC 2396, without touching the file:/// part.
     """
-    protocol = urlparse(uri)[0]
-    if not (protocol == "file" or protocol == ""):
-        return uri
+
     parts = urlsplit(uri, allow_fragments=False)
     # Make absolutely sure the string is unquoted before quoting again!
     raw_path = unquote(parts.path)
     # For computing thumbnail md5 hashes in the media library, we must adhere to
     # RFC 2396. It is quite tricky to handle all corner cases, leave it to Gst:
-    return Gst.filename_to_uri(raw_path)
+    uri = Gst.filename_to_uri(raw_path)
+    if not (parts.scheme == "file" or parts.scheme == ""):
+        parts2 = urlsplit(uri, allow_fragments=False)
+        return parts.scheme + "://" + parts2.path
+    return uri
 
 
 class PathWalker(Thread):
