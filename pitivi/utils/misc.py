@@ -138,7 +138,6 @@ def quote_uri(uri):
     """
     Encode a URI/path according to RFC 2396, without touching the file:/// part.
     """
-
     parts = urlsplit(uri, allow_fragments=False)
     # Make absolutely sure the string is unquoted before quoting again!
     raw_path = unquote(parts.path)
