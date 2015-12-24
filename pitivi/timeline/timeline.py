@@ -178,8 +178,8 @@ class Marquee(Gtk.Box, Loggable):
             for clip in layer.get_clips():
                 if self.contains(clip, x, w):
                     toplevel = clip.get_toplevel_parent()
-                    if isinstance(toplevel, GES.Group) and toplevel != self._timeline.current_group:
-                        res.extend([c for c in clip.get_toplevel_parent().get_children(True)
+                    if isinstance(toplevel, GES.Group) and toplevel != self._timeline.selection.selected:
+                        res.extend([c for c in toplevel.get_children(True)
                                     if isinstance(c, GES.Clip)])
                     else:
                         res.append(clip)
@@ -289,8 +289,6 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
 
         # Clip selection.
         self.selection = Selection()
-        self.current_group = None
-        self.resetSelectionGroup()
         self.__marquee = Marquee(self)
         self.layout.put(self.__marquee, 0, 0)
 
@@ -349,14 +347,6 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
             return self.__fake_event_widget
 
         return Gtk.get_event_widget(event)
-
-    def resetSelectionGroup(self):
-        self.debug("Reset selection group")
-        if self.current_group:
-            GES.Container.ungroup(self.current_group, False)
-
-        self.current_group = GES.Group()
-        self.current_group.props.serialize = False
 
     def setProject(self, project):
         """
@@ -704,11 +694,8 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
         self.vadj.set_value(self.vadj.get_value() + y_diff)
 
     def _selectUnderMarquee(self):
-        self.resetSelectionGroup()
         if self.__marquee.props.width_request > 0:
             clips = self.__marquee.findSelected()
-            for clip in clips:
-                self.current_group.add(clip.get_toplevel_parent())
         else:
             clips = []
         self.selection.setSelection(clips, SELECT)
@@ -729,7 +716,6 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
 
         placement = 0
         self.draggingElement = None
-        self.resetSelectionGroup()
         self.selection.setSelection([], SELECT)
         assets = self._project.assetsForUris(self.dropData)
         if not assets:
@@ -756,7 +742,6 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
                                      clip_duration,
                                      asset.get_supported_formats())
             placement += clip_duration
-            self.current_group.add(bClip.get_toplevel_parent())
             self.selection.setSelection([], SELECT_ADD)
             self.app.action_log.commit()
             self._project.pipeline.commit_timeline()
@@ -786,11 +771,10 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
         self.__unsetHoverSeparators()
         if self.draggingElement:
             self.__last_clips_on_leave = [(clip.get_layer(), clip)
-                                          for clip in self.current_group.get_children(False)]
+                                          for clip in self.selection]
             self.dropDataReady = False
             if self._createdClips:
-                clips = self.current_group.get_children(False)
-                self.resetSelectionGroup()
+                clips = self.selection.selected.get_children(False)
                 self.selection.setSelection([], SELECT)
                 for clip in clips:
                     clip.get_layer().remove_clip(clip)
@@ -1051,7 +1035,7 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
         self._on_layer, on_separators = self.__getLayerAt(y,
                                                           prefer_bLayer=self._on_layer)
         if (mode != GES.EditMode.EDIT_NORMAL or
-                self.current_group.props.height > 1):
+                self.selection.selected.props.height > 1):
             # When dragging clips from more than one layer, do not allow
             # them to be dragged between layers to create a new layer.
             on_separators = []
@@ -1556,14 +1540,9 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
             self.app.action_log.begin("ungroup")
 
             for obj in self.timeline.selection:
-                toplevel = obj.get_toplevel_parent()
-                if toplevel == self.timeline.current_group:
-                    for child in toplevel.get_children(False):
-                        child.ungroup(False)
-                else:
-                    toplevel.ungroup(False)
+                obj.ungroup(False)
 
-            self.timeline.resetSelectionGroup()
+            self.timeline.selection.resetSelectionGroup()
 
             self.app.action_log.commit()
             self._project.pipeline.commit_timeline()
@@ -1575,25 +1554,25 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
             containers = set({})
 
             for obj in self.timeline.selection:
-                toplevel = obj.get_toplevel_parent()
-                if toplevel == self.timeline.current_group:
+                if isinstance(obj, GES.Group):
                     for child in toplevel.get_children(False):
                         containers.add(child)
-                    toplevel.ungroup(False)
                 else:
-                    containers.add(toplevel)
+                    containers.add(obj)
 
+            self.timeline.selection.clearSelectionGroup()
             if containers:
                 GES.Container.group(list(containers))
 
-            self.timeline.resetSelectionGroup()
+            self.timeline.selection.setSelection(list(containers), SELECT)
 
             self._project.pipeline.commit_timeline()
             self.app.action_log.commit()
 
     def __copyClipsCb(self, unused_action, unused_parameter):
-        if self.timeline.current_group:
-            self.__copiedGroup = self.timeline.current_group.copy(True)
+        if self.timeline.selection.selected.get_children(False):
+            # We check if the current group has elements.
+            self.__copiedGroup = self.timeline.selection.selected.copy(True)
             self.updateActions()
 
     def __pasteClipsCb(self, unused_action, unused_parameter):

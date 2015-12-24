@@ -101,7 +101,8 @@ class Selection(GObject.Object, Loggable):
     def __init__(self):
         GObject.Object.__init__(self)
         Loggable.__init__(self)
-        self.selected = set()
+        self._selected = set()
+        self.selected = GES.Group()
 
     def setSelection(self, objs, mode):
         """
@@ -124,18 +125,18 @@ class Selection(GObject.Object, Loggable):
             else:
                 selection.add(obj)
         if mode == SELECT_ADD:
-            selection = self.selected | selection
+            selection = self._selected | selection
         elif mode == UNSELECT:
-            selection = self.selected - selection
+            selection = self._selected - selection
 
-        old_selection = self.selected
+        old_selection = self._selected
         if selection == old_selection:
             # Nothing changed. This can happen for example when the user clicks
             # the selected clip, then the clip remains selected.
             return
-        self.selected = selection
+        self._selected = selection
 
-        for obj in old_selection - self.selected:
+        for obj in old_selection - self._selected:
             obj.selected.selected = False
             for element in obj.get_children(False):
                 if obj.ui:
@@ -143,7 +144,7 @@ class Selection(GObject.Object, Loggable):
                 if not isinstance(element, GES.BaseEffect) and not isinstance(element, GES.TextOverlay):
                     element.selected.selected = False
 
-        for obj in self.selected - old_selection:
+        for obj in self._selected - old_selection:
             obj.selected.selected = True
             if not hasattr(obj, "ui") or not obj.ui:
                 continue
@@ -151,6 +152,8 @@ class Selection(GObject.Object, Loggable):
             for element in obj.get_children(False):
                 if not isinstance(element, GES.BaseEffect) and not isinstance(element, GES.TextOverlay):
                     element.selected.selected = True
+
+        self.resetSelectionGroup()
         self.emit("selection-changed")
 
     def unselect(self, objs):
@@ -161,7 +164,7 @@ class Selection(GObject.Object, Loggable):
         Returns the list of L{TrackElement} contained in this selection.
         """
         objects = []
-        for clip in self.selected:
+        for clip in self.selected.get_children(False):
             objects.extend(clip.get_children(False))
 
         return set(objects)
@@ -169,7 +172,7 @@ class Selection(GObject.Object, Loggable):
     def getSelectedTrackElementsAtPosition(self, position, element_type=GObject.Object,
                                            track_type=GES.TrackType.UNKNOWN):
         selected = []
-        for clip in self.selected:
+        for clip in self.selected.get_children(False):
             if clip.props.start <= position and position <= clip.props.start + clip.props.duration:
                 elements = clip.find_track_elements(None, track_type, element_type)
                 if elements:
@@ -182,7 +185,7 @@ class Selection(GObject.Object, Loggable):
         Returns the list of L{GES.BaseEffect} contained in this selection.
         """
         effects = []
-        for clip in self.selected:
+        for clip in self.selected.get_children(False):
             for element in clip.get_children(False):
                 if isinstance(element, GES.BaseEffect):
                     effects.append(element)
@@ -194,17 +197,31 @@ class Selection(GObject.Object, Loggable):
 
         @param clip_type: The class the clip must be an instance of.
         """
-        if len(self.selected) == 1:
-            clip = tuple(self.selected)[0]
+        if len(self.selected.get_children(False)) == 1:
+            clip = self.selected.get_children(False)[0]
             if isinstance(clip, clip_type):
                 return clip
         return None
 
+    def resetSelectionGroup(self):
+        self.clearSelectionGroup()
+        for obj in self._selected:
+            parent = obj.get_parent()
+            if isinstance(parent, GES.Group):
+                if parent not in self.selected.get_children(False):
+                    self.selected.add(parent)
+            else:
+                self.selected.add(obj)
+
+    def clearSelectionGroup(self):
+        for obj in self.selected.get_children(False):
+            self.selected.remove(obj)
+
     def __len__(self):
-        return len(self.selected)
+        return len(self.selected.get_children(False))
 
     def __iter__(self):
-        return iter(self.selected)
+        return iter(self.selected.get_children(False))
 
 
 # -----------------------------------------------------------------------------#

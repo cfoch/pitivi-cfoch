@@ -250,7 +250,7 @@ class EffectProperties(Gtk.Expander, Loggable):
         self.selected_effects = selection.getSelectedEffects()
 
         if selection:
-            self.clips = list(selection.selected)
+            self.clips = selection.selected.get_children(False)
             for clip in self.clips:
                 clip.connect("child-added", self._trackElementAddedCb)
                 clip.connect("child-removed", self._trackElementRemovedCb)

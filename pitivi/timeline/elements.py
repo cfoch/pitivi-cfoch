@@ -673,7 +673,7 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
             self.info("Adding effect %s", self.timeline.dropData)
             self.app.gui.clipconfig.effect_expander.addEffectToClip(self.bClip,
                                                                     self.timeline.dropData)
-            self.timeline.resetSelectionGroup()
+            # self.timeline.resetSelectionGroup()
             self.timeline.selection.setSelection([self.bClip], timelineUtils.SELECT)
             self.app.gui.switchContextTab(self.bClip)
             self.timeline.cleanDropData()
@@ -786,33 +786,16 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         if self.timeline.parent._controlMask:
             if not self.get_state_flags() & Gtk.StateFlags.SELECTED:
                 mode = timelineUtils.SELECT_ADD
-                self.timeline.current_group.add(
-                    self.bClip.get_toplevel_parent())
             else:
-                self.timeline.current_group.remove(
-                    self.bClip.get_toplevel_parent())
                 mode = timelineUtils.UNSELECT
         elif not self.get_state_flags() & Gtk.StateFlags.SELECTED:
-            self.timeline.resetSelectionGroup()
-            self.timeline.current_group.add(
-                self.bClip.get_toplevel_parent())
             self.app.gui.switchContextTab(self.bClip)
-        else:
-            self.timeline.resetSelectionGroup()
 
         parent = self.bClip.get_parent()
-        if parent == self.timeline.current_group or parent is None:
+        if parent is None:
             selection = [self.bClip]
         else:
-            while parent:
-                if parent.get_parent() == self.timeline.current_group:
-                    break
-                parent = parent.get_parent()
-
-            children = parent.get_children(True)
-            selection = [elem for elem in children if isinstance(elem, GES.SourceClip) or
-                         isinstance(elem, GES.TransitionClip)]
-
+            selection = parent.get_children(True)
         self.timeline.selection.setSelection(selection, mode)
 
         return False

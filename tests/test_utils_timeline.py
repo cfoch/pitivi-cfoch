@@ -23,6 +23,7 @@ from gi.repository import GES
 
 from tests import common
 
+from pitivi.application import Pitivi
 from pitivi.utils.timeline import Selected, Selection, SELECT, SELECT_ADD, \
     UNSELECT
 
@@ -41,9 +42,24 @@ class TestSelected(TestCase):
 
 
 class TestSelection(TestCase):
+    def setUp(self):
+        app = Pitivi()
+        app._startupCb(app)
+        app.project_manager.newBlankProject()
+
+        self.timeline = app.project_manager.current_project.timeline
+        self.layer = self.timeline.append_layer()
 
     def testBoolEvaluation(self):
-        clip1 = mock.MagicMock()
+        clip1 = GES.TitleClip()
+        self.layer.add_clip(clip1)
+
+        # Remember that Selected __init__ as False
+        clip1.selected = Selected()
+        source1 = clip1.get_children(False)[0]
+        source1.selected = Selected()
+        clip1.ui = mock.MagicMock()
+
         selection = Selection()
         self.assertFalse(selection)
         selection.setSelection([clip1], SELECT)
@@ -55,8 +71,25 @@ class TestSelection(TestCase):
 
     def testGetSingleClip(self):
         selection = Selection()
-        clip1 = common.createTestClip(GES.UriClip)
-        clip2 = common.createTestClip(GES.TitleClip)
+        uri = common.TestCase.getSampleUri("tears_of_steel.webm")
+        asset = GES.UriClipAsset.request_sync(uri)
+
+        clip1 = asset.extract()
+        clip2 = GES.TitleClip()
+
+        self.layer.add_clip(clip1)
+        self.layer.add_clip(clip2)
+
+        # Remember that Selected __init__ as False
+        clip1.selected = Selected()
+        for source in clip1.get_children(False):
+            source.selected = Selected()
+        clip1.ui = None
+
+        clip2.selected = Selected()
+        source2 = clip2.get_children(False)[0]
+        source2.selected = Selected()
+        clip2.ui = None
 
         # Selection empty.
         self.assertFalse(selection.getSingleClip(GES.TitleClip))
