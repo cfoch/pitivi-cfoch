@@ -218,7 +218,7 @@ class EditingContext(GObject.Object, Loggable):
         This is the main class for interactive edition.
     """
 
-    def __init__(self, focus, timeline, mode, edge, unused_settings, action_log):
+    def __init__(self, focus, timeline, mode, edge, unused_settings, action_log, begin_action_log=True):
         """
         @param focus: the Clip or TrackElement which is to be the
         main target of interactive editing, such as the object directly under the
@@ -261,6 +261,11 @@ class EditingContext(GObject.Object, Loggable):
         self.edge = edge
         self.mode = mode
 
+        self.begin_action_log = begin_action_log
+        if self.begin_action_log:
+            self.begin()
+
+    def begin(self):
         self.action_log.begin("move-clip")
 
     def finish(self):
