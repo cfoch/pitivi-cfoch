@@ -749,7 +749,6 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
 
             self.debug("Creating %s at %s", asset.props.id, Gst.TIME_ARGS(placement))
 
-            self.app.action_log.begin("add clip")
             bClip = bLayer.add_asset(asset,
                                      placement,
                                      0,
@@ -758,7 +757,7 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
             placement += clip_duration
             self.current_group.add(bClip.get_toplevel_parent())
             self.selection.setSelection([], SELECT_ADD)
-            self.app.action_log.commit()
+
             self._project.pipeline.commit_timeline()
 
             if not self.draggingElement:
@@ -778,7 +777,10 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
         else:
             if not self.__createClips(x, y):
                 # The clips are already created.
-                self.__dragUpdate(self, x, y)
+                # We do not want to create an undoable action in the
+                # editing_context, so we set it to False. We will create the first
+                # undoable action in __dragDropCb()
+                self.__dragUpdate(self, x, y, begin_editing_context=False)
         Gdk.drag_status(context, Gdk.DragAction.COPY, timestamp)
         return True
 
@@ -792,10 +794,10 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
                 clips = self.current_group.get_children(False)
                 self.resetSelectionGroup()
                 self.selection.setSelection([], SELECT)
+
                 for clip in clips:
                     clip.get_layer().remove_clip(clip)
                 self._project.pipeline.commit_timeline()
-                self.app.action_log.commit()
 
             self.draggingElement = None
             self.__got_dragged = False
@@ -818,8 +820,8 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
         self.cleanDropData()
         if target == URI_TARGET_ENTRY.target:
             if self.__last_clips_on_leave:
-                self.app.action_log.begin("add clip")
 
+                self.app.action_log.begin("add clip")
                 if self.__on_separators:
                     created_layer = self.__getDroppedLayer()
                 else:
@@ -828,6 +830,7 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
                     if created_layer:
                         layer = created_layer
                     layer.add_clip(clip)
+                self.app.action_log.commit()
 
                 if zoom_was_fitted:
                     self.parent._setBestZoomRatio()
@@ -1014,7 +1017,7 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
             unset_children_state_recurse(sep, Gtk.StateFlags.PRELIGHT)
         self.__on_separators = []
 
-    def __dragUpdate(self, event_widget, x, y):
+    def __dragUpdate(self, event_widget, x, y, begin_editing_context=True):
         if not self.draggingElement:
             return
 
@@ -1032,7 +1035,8 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
                                                   edit_mode,
                                                   dragging_edge,
                                                   None,
-                                                  self.app.action_log)
+                                                  self.app.action_log,
+                                                  begin_editing_context)
 
         x, y = event_widget.translate_coordinates(self, x, y)
         x -= CONTROL_WIDTH
@@ -1112,7 +1116,8 @@ class Timeline(Gtk.EventBox, Zoomable, Loggable):
                                             layer.get_priority())
             self.layout.props.width = self._timelineLengthInPixels()
 
-            self.editing_context.finish()
+            if self.editing_context.begin_action_log:
+                self.editing_context.finish()
 
         self.draggingElement = None
         self.__clickedHandle = None

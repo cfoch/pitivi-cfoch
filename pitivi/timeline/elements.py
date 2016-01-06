@@ -912,7 +912,7 @@ class Clip(Gtk.EventBox, timelineUtils.Zoomable, Loggable):
         self.updatePosition()
 
     def __disconnectFromChild(self, child):
-        if child.ui:
+        if hasattr(child, "ui") and child.ui is not None:
             if hasattr(child.ui, "__clip_curve_enter_id") and child.ui.__clip_curve_enter_id:
                 child.ui.disconnect_by_func(child.ui.__clip_curve_enter_id)
                 child.ui.disconnect_by_func(child.ui.__clip_curve_leave_id)
