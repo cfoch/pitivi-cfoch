@@ -1196,6 +1196,9 @@ class Project(Loggable, GES.Project):
             asset.creation_progress = 100
             self.__updateAssetLoadingProgress()
 
+        if not self.loading_assets:
+            self.app.action_log.commit()
+
     def do_loading_error(self, error, asset_id, unused_type):
         """ vmethod, get called on "asset-loading-error"""
         if not self.loaded:

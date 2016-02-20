@@ -22,6 +22,7 @@
 
 from unittest import TestCase
 
+from gi.repository import GLib
 from gi.repository import GES
 from gi.repository import Gst
 
@@ -32,6 +33,7 @@ from pitivi.undo.timeline import TimelineLogObserver, \
     ClipPropertyChanged, TrackElementAdded
 from pitivi.undo.undo import UndoableActionLog
 from pitivi.application import Pitivi
+from pitivi.project import AssetAddedAction
 
 
 class TimelineLogObserverSpy(TimelineLogObserver):
@@ -104,11 +106,11 @@ class TestTimelineLogObserver(TestCase):
 class TestTimelineUndo(TestCase):
 
     def setUp(self):
-        app = Pitivi()
-        app._startupCb(app)
-        app.project_manager.newBlankProject()
+        self.app = Pitivi()
+        self.app._startupCb(self.app)
+        self.app.project_manager.newBlankProject()
 
-        self.timeline = app.project_manager.current_project.timeline
+        self.timeline = self.app.project_manager.current_project.timeline
         self.layer = GES.Layer()
         self.timeline.add_layer(self.layer)
         self.action_log = UndoableActionLog()
@@ -370,3 +372,27 @@ class TestTimelineUndo(TestCase):
         self.assertEqual(2, len(self.layer.get_clips()))
         self.action_log.redo()
         self.assertEqual(3, len(self.layer.get_clips()))
+
+    def testAssetAdded(self):
+        project = self.app.project_manager.current_project
+        project.connect("asset-added", self._assetAddedCb)
+        uris = [common.getSampleUri("tears_of_steel.webm")]
+
+        self.action_log.begin("asset-added")
+        project.addUris(uris)
+
+        self.mainloop = GLib.MainLoop.new(None, False)
+        self.mainloop.run()
+
+        self.assertEqual(1, len(project.list_assets(GES.Extractable)))
+        self.action_log.undo()
+        self.assertEqual(0, len(project.list_assets(GES.Extractable)))
+        self.action_log.redo()
+        self.assertEqual(1, len(project.list_assets(GES.Extractable)))
+
+    def _assetAddedCb(self, project, asset):
+        action = AssetAddedAction(project, asset)
+        self.action_log.push(action)
+        # This actually should be executed in do_asset_added vfunc.
+        self.action_log.commit()
+        self.mainloop.quit()
