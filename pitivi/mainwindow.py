@@ -691,7 +691,7 @@ class PitiviMainWindow(Gtk.ApplicationWindow, Loggable):
             self.app.project_manager.loadProject(uri)
         else:
             self.info("User cancelled loading a new project")
-            self.app.welcome_wizard.show()
+            self.app.project_manager.newBlankProject()
 
     def _canLoadUri(self, filterinfo, unused_uri):
         try:
