@@ -625,6 +625,14 @@ class VideoSource(TimelineElement):
         return VideoBackground()
 
 
+class ImageSequenceSource(TimelineElement):
+
+    __gtype_name__ = "PitiviImageSequenceSource"
+
+    def _getBackground(self):
+        return VideoBackground()
+
+
 class TitleSource(VideoSource):
 
     __gtype_name__ = "PitiviTitleSource"
@@ -1038,6 +1046,20 @@ class SourceClip(Clip):
             child.ui = None
 
 
+class ImageSequenceClip(SourceClip):
+    __gtype_name__ = "PitiviImageSequenceClip"
+    def __init__(self, layer, ges_clip):
+        SourceClip.__init__(self, layer, ges_clip)
+
+    def _childAdded(self, clip, child):
+        SourceClip._childAdded(self, clip, child)
+        if isinstance(child, GES.ImageSequenceSource):
+            if child.get_track_type() == GES.TrackType.VIDEO:
+                self._videoSource = ImageSequenceSource(child, self.timeline)
+                child.ui = self._videoSource
+                self._elements_container.pack_start(self._videoSource, True, False, 0)
+                self._videoSource.set_visible(True)
+
 class UriClip(SourceClip):
     __gtype_name__ = "PitiviUriClip"
 
@@ -1135,5 +1157,6 @@ class TransitionClip(Clip):
 GES_TYPE_UI_TYPE = {
     GES.UriClip.__gtype__: UriClip,
     GES.TitleClip.__gtype__: TitleClip,
-    GES.TransitionClip.__gtype__: TransitionClip
+    GES.TransitionClip.__gtype__: TransitionClip,
+    GES.ImageSequenceClip.__gtype__: ImageSequenceClip
 }

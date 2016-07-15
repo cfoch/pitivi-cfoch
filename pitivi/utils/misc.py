@@ -19,7 +19,9 @@
 # Boston, MA 02110-1301, USA.
 import bisect
 import hashlib
+import mimetypes
 import os
+import re
 import subprocess
 import threading
 import time
@@ -302,3 +304,104 @@ def unicode_error_dialog():
     dialog.set_title(_("Error while decoding a string"))
     dialog.run()
     dialog.destroy()
+
+
+def filename_of_type(filename, mimetype, compare_subtype=True):
+    """
+    Checks if filename is of type or type/subtype if compare_subtype.
+    """
+    btype = mimetypes.guess_type(filename)[0]
+    ret = False
+    if btype is not None:
+        if compare_subtype:
+            ret = btype == mimetype
+        else:
+            ret = (mimetype.split("/")[0] is not None and
+                btype.split("/")[0] == mimetype.split("/")[0])
+    return ret
+
+
+def filenames_same_type(filenames, compare_mimetype=True,
+                        compare_extension=True):
+    """
+    Checks if all the filenames have the same type.
+    """
+    mime_base = mimetypes.guess_type(filenames[0])[0]
+    ext = os.path.splitext(filenames[0])[1]
+    for filename in filenames:
+        extension = os.path.splitext(filenames[0])[1]
+        if ((compare_mimetype and not filename_of_type(filename, mime_base))
+            or (compare_extension and ext != extension)):
+            return False
+    return True
+
+def image_sequence_info_from_pattern(pattern):
+    path = os.path.dirname(pattern)
+    filenames = os.listdir(path)
+    if not filenames:
+        return
+    if (not filename_of_type(filenames[0], "image", False) or
+        not filenames_same_type(filenames) or len(filenames) < 2):
+        return
+    basename = os.path.basename(pattern)
+    extension = os.path.splitext(basename)[1]
+
+    indices = []
+    for filename in filenames:
+        tmp_root, tmp_extension = os.path.splitext(filename)
+        if extension != tmp_extension:
+            return
+        sequence_index = int(tmp_root)
+        indices.append(sequence_index)
+
+    if not indices:
+        return
+
+    # Validate that filenames follow a sequence
+    indices.sort()
+    if indices != list(range(indices[0], indices[-1] + 1)):
+        return
+
+    start = indices[0]
+    stop = indices[-1]
+    return {"start-index": start, "stop-index": stop, "location": pattern}
+
+def discover_image_sequence_pattern(path):
+    if not os.path.isdir(path):
+        path = os.path.dirname(path)
+    filenames = os.listdir(path)
+    if not filenames:
+        return
+    if (not filename_of_type(filenames[0], "image", False) or
+        not filenames_same_type(filenames) or len(filenames) < 2):
+        return
+    # The filename with the longest length can give more information to
+    filename_target = max(filenames, key=len)
+    extension = os.path.splitext(filename_target)[1]
+    regex = '(\d+\\b%s\\b)' % extension
+    tokens_cmp = re.split(regex, filename_target)[:-1]
+    if (len(tokens_cmp) != 2):
+        return
+    n_zeros = len(tokens_cmp[1].split(".")[0])
+
+    indices = []
+    for filename in filenames:
+        tokens = re.split(regex, filename)[:-1]
+        n_zeros = min(n_zeros, len(tokens[1].split(".")[0]))
+        if not tokens or len(tokens) != 2 or tokens[0] != tokens_cmp[0]:
+            return
+        sequence_index = int(os.path.splitext(tokens[-1])[0])
+        indices.append(sequence_index)
+    if not indices:
+        return
+
+    # Validate that filenames follow a sequence
+    indices.sort()
+    if indices != list(range(indices[0], indices[-1] + 1)):
+        return
+
+    printf_format = '%0' + str(n_zeros) + 'd'
+    tokens_cmp[1] = printf_format
+    tokens_cmp.append(extension)
+    pattern =  "".join(tokens_cmp)
+    return os.path.join(path, pattern)

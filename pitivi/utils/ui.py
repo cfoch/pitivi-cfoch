@@ -266,25 +266,27 @@ def beautify_asset(asset):
         except KeyError:
             return len(ranks)
 
-    info = asset.get_info()
     uri = get_proxy_target(asset).props.id
-    info.get_stream_list().sort(key=stream_sort_key)
-    nice_streams_txts = []
-    for stream in info.get_stream_list():
-        try:
-            beautified_string = beautify_stream(stream)
-        except NotImplementedError:
-            doLog(ERROR, "Beautify", "None", "Cannot beautify %s", stream)
-            continue
-        if beautified_string:
-            nice_streams_txts.append(beautified_string)
+    if hasattr(asset, "get_info"):
+        info = asset.get_info()
+        info.get_stream_list().sort(key=stream_sort_key)
+        nice_streams_txts = []
+        for stream in info.get_stream_list():
+            try:
+                beautified_string = beautify_stream(stream)
+            except NotImplementedError:
+                doLog(ERROR, "Beautify", "None", "Cannot beautify %s", stream)
+                continue
+            if beautified_string:
+                nice_streams_txts.append(beautified_string)
 
-    res = "<b>" + path_from_uri(uri) + "</b>\n" + "\n".join(nice_streams_txts)
+        res = "<b>" + path_from_uri(uri) + "</b>\n" + "\n".join(nice_streams_txts)
 
-    if asset.creation_progress < 100:
-        res += _("\n<b>Proxy creation progress: ") + \
-            "</b>%d%%" % asset.creation_progress
-
+        if asset.creation_progress < 100:
+            res += _("\n<b>Proxy creation progress: ") + \
+                "</b>%d%%" % asset.creation_progress
+    else:
+        res = "<b>%s</b>" % asset.props.id
     return res
 
 

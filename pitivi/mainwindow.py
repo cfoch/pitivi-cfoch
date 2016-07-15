@@ -539,6 +539,8 @@ class MainWindow(Gtk.ApplicationWindow, Loggable):
         # Technically, our preview widget can show images, but it's never going
         # to do a better job (sizing, zooming, metadata, editing, etc.)
         # than the user's favorite image viewer.
+        if not asset.get_extractable_type().is_a(GES.UriSourceAsset):
+            return
         if asset.is_image():
             subprocess.call(['xdg-open', str(path_from_uri(asset.get_id()))])
         else:

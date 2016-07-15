@@ -49,6 +49,7 @@ from pitivi.shortcutswindow import ShortcutsWindow
 from pitivi.timeline.previewers import getThumbnailCache
 from pitivi.utils.loggable import Loggable
 from pitivi.utils.misc import disconnectAllByFunc
+from pitivi.utils.misc import discover_image_sequence_pattern
 from pitivi.utils.misc import get_proxy_target
 from pitivi.utils.misc import path_from_uri
 from pitivi.utils.misc import PathWalker
@@ -129,6 +130,9 @@ class FileChooserExtraWidget(Gtk.Grid, Loggable):
         self.__close_after.set_active(self.app.settings.closeImportDialog)
         self.attach(self.__close_after, 0, 0, 1, 2)
 
+        self._image_sequence = Gtk.CheckButton.new_with_label(
+            _("Import as a sequence of images"))
+
         self.__automatic_proxies = Gtk.RadioButton.new_with_label(
             None, _("Create proxies when the media format is not supported officially"))
         self.__automatic_proxies.set_tooltip_markup(
@@ -159,7 +163,9 @@ class FileChooserExtraWidget(Gtk.Grid, Loggable):
         self.attach(self.__automatic_proxies, 1, 0, 1, 1)
         self.attach(self.__force_proxies, 1, 1, 1, 1)
         self.attach(self.__no_proxies, 1, 2, 1, 1)
+        self.attach(self._image_sequence, 1, 3, 1, 1)
         self.show_all()
+        self._image_sequence.hide()
 
     def saveValues(self):
         self.app.settings.closeImportDialog = self.__close_after.get_active()
@@ -199,9 +205,10 @@ class ThumbnailsDecorator(Loggable):
         target = asset.get_proxy_target()
         if target and not target.get_error():
             self.state = self.PROXIED
-        elif asset.proxying_error:
+        elif hasattr(asset, "proxing_error") and asset.proxying_error:
             self.state = self.ASSET_PROXYING_ERROR
-        elif not asset.creation_progress == 100:
+        elif (hasattr(asset, "creation_progress") and
+                not asset.creation_progress == 100):
             self.state = self.IN_PROGRESS
         else:
             self.state = self.NO_PROXY
@@ -676,6 +683,8 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
         dialog.set_preview_widget(previewer)
         dialog.set_use_preview_label(False)
         dialog.connect('update-preview', previewer.update_preview_cb)
+        dialog.connect('selection-changed',
+            self._importDialogBoxSelectionChangedCb)
 
         # Filter for the "known good" formats by default
         filter = Gtk.FileFilter()
@@ -754,7 +763,10 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
         # 128 is the normal size for thumbnails, but for *icons* it looks
         # insane
         LARGE_SIZE = 96
-        info = asset.get_info()
+        if hasattr(asset, "get_info"):
+            info = asset.get_info()
+        else:
+            info = None
 
         if self.app.proxy_manager.is_proxy_asset(asset) and \
                 not asset.props.proxy_target:
@@ -764,14 +776,23 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
 
         self.debug("Adding asset %s", asset.props.id)
 
+
         # The code below tries to read existing thumbnails from the freedesktop
         # thumbnails directory (~/.thumbnails). The filenames are simply
         # the file URI hashed with md5, so we can retrieve them easily.
-        video_streams = [
-            stream_info for stream_info in info.get_stream_list()
-            if isinstance(stream_info, GstPbutils.DiscovererVideoInfo)]
-        real_uri = get_proxy_target(asset).props.id
-        if video_streams:
+        if info is not None:
+            video_streams = [
+                stream_info for stream_info in info.get_stream_list()
+                if isinstance(stream_info, GstPbutils.DiscovererVideoInfo)]
+        else:
+            video_streams = []
+
+        if asset.get_extractable_type().is_a(GES.ImageSequenceClip):
+            filename = os.listdir(os.path.dirname(asset.props.id))[0]
+            real_uri = os.path.join(os.path.dirname(asset.props.id), filename)
+        else:
+            real_uri = get_proxy_target(asset).props.id
+        if video_streams or asset.get_extractable_type().is_a(GES.ImageSequenceClip):
             # From the freedesktop spec: "if the environment variable
             # $XDG_CACHE_HOME is set and not blank then the directory
             # $XDG_CACHE_HOME/thumbnails will be used, otherwise
@@ -794,7 +815,7 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
                 thumb_64, thumb_128 = self._getThumbnailInDir(
                     thumb_dir, thumbnail_hash)
             if thumb_64 is None:
-                if asset.is_image():
+                if asset.is_image() or asset.get_extractable_type().is_a(GES.ImageSequenceClip):
                     thumb_64 = self._getIcon("image-x-generic")
                     thumb_128 = self._getIcon(
                         "image-x-generic", None, LARGE_SIZE)
@@ -814,11 +835,14 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
             thumb_128 = self._getIcon("audio-x-generic", None, LARGE_SIZE)
 
         thumbs_decorator = ThumbnailsDecorator([thumb_64, thumb_128], asset)
-        if info.get_duration() == Gst.CLOCK_TIME_NONE:
+        if info is None or info.get_duration() == Gst.CLOCK_TIME_NONE:
             duration = ''
         else:
             duration = beautify_length(info.get_duration())
-        name = info_name(asset)
+        if isinstance(asset, GES.UriSourceAsset):
+            name = info_name(asset)
+        else:
+            name = asset.props.id
         self.pending_rows.append((thumbs_decorator.thumb_64,
                                   thumbs_decorator.thumb_128,
                                   beautify_asset(asset),
@@ -899,7 +923,8 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
             self.info("Asset %s already in!", asset.props.id)
             return
 
-        if isinstance(asset, GES.UriClipAsset) and not asset.error:
+        if (asset.get_extractable_type().is_a(GES.ImageSequenceClip) or
+                isinstance(asset, GES.UriClipAsset) and not asset.error):
             self.debug("Asset %s added: %s", asset, asset.props.id)
             asset.connect("notify::proxy", self.__assetProxiedCb)
             asset.connect("notify::proxy-target", self.__assetProxyingCb)
@@ -908,7 +933,6 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
                            asset.props.id,
                            asset.get_proxy().props.id)
                 return
-
             self._addAsset(asset)
 
     def _assetRemovedCb(self, unused_project, asset):
@@ -1033,14 +1057,27 @@ class MediaLibraryWidget(Gtk.Box, Loggable):
 
     # Import Sources Dialog Box callbacks
 
+    def _importDialogBoxSelectionChangedCb(self, dialogbox):
+        path = dialogbox.get_current_folder()
+        image_sequence_location = discover_image_sequence_pattern(path)
+        if image_sequence_location is not None:
+            dialogbox.props.extra_widget._image_sequence.show()
+        else:
+            dialogbox.props.extra_widget._image_sequence.hide()
+
     def _importDialogBoxResponseCb(self, dialogbox, response):
         self.debug("response: %r", response)
         if response == Gtk.ResponseType.OK:
             lastfolder = dialogbox.get_current_folder()
             self.app.settings.lastImportFolder = lastfolder
             dialogbox.props.extra_widget.saveValues()
-            filenames = dialogbox.get_uris()
-            self._project.addUris(filenames)
+            if (dialogbox.props.extra_widget._image_sequence.props.visible and
+                    dialogbox.props.extra_widget._image_sequence.get_active()):
+                location = discover_image_sequence_pattern(lastfolder)
+                self._project.create_asset(location, GES.ImageSequenceClip)
+            else:
+                filenames = dialogbox.get_uris()
+                self._project.addUris(filenames)
             if self.app.settings.closeImportDialog:
                 dialogbox.destroy()
         else:

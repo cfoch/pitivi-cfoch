@@ -40,6 +40,7 @@ from pitivi.timeline.layer import LayerControls
 from pitivi.timeline.ruler import ScaleRuler
 from pitivi.undo.timeline import CommitTimelineFinalizingAction
 from pitivi.utils.loggable import Loggable
+from pitivi.utils.misc import image_sequence_info_from_pattern
 from pitivi.utils.timeline import EditingContext
 from pitivi.utils.timeline import SELECT
 from pitivi.utils.timeline import SELECT_ADD
@@ -1235,17 +1236,31 @@ class TimelineContainer(Gtk.Grid, Zoomable, Loggable):
                     layer.add_clip(obj)
                     duration = obj.get_duration()
                 elif isinstance(obj, GES.Asset):
-                    if obj.is_image():
-                        duration = self.app.settings.imageClipLength * \
-                            Gst.SECOND / 1000.0
-                    else:
-                        duration = obj.get_duration()
+                    if obj.get_extractable_type().is_a(GES.UriClip):
+                        if obj.is_image():
+                            duration = self.app.settings.imageClipLength * \
+                                Gst.SECOND / 1000.0
+                        else:
+                            duration = obj.get_duration()
 
-                    layer.add_asset(obj,
-                                    start=clip_position,
-                                    inpoint=0,
-                                    duration=duration,
-                                    track_types=obj.get_supported_formats())
+                        layer.add_asset(obj,
+                                        start=clip_position,
+                                        inpoint=0,
+                                        duration=duration,
+                                        track_types=obj.get_supported_formats())
+                    elif obj.get_extractable_type().is_a(GES.ImageSequenceClip):
+                        clip = layer.add_asset(obj,
+                                               start=clip_position,
+                                               inpoint=0,
+                                               duration=1,
+                                               track_types=GES.TrackType.VIDEO)
+                        properties =\
+                            image_sequence_info_from_pattern(obj.props.id)
+                        # TODO: Ask the user to set a customized framerate.
+                        for prop_name, prop_val in properties.items():
+                            clip.set_child_property(prop_name, prop_val)
+                        duration = clip.get_child_property("duration")[1]
+                        clip.set_duration(duration)
                 else:
                     raise TimelineError("Cannot insert: %s" % type(obj))
                 clip_position += duration
